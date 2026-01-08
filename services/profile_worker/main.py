@@ -10,7 +10,7 @@ import mediapipe as mp
 import numpy as np
 import torch
 from diffusers import DiffusionPipeline
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from shared.logging_config import get_logger
