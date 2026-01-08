@@ -4,7 +4,7 @@ import time
 import asyncio
 
 import torch
-from diffusers import AutoPipelineForText2Image
+from diffusers import ZImagePipeline
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import Response
 
@@ -41,10 +41,10 @@ async def load_model() -> None:
         "loading_text2img_model",
         extra={"extra_fields": {"model_id": MODEL_ID, "dtype": str(torch_dtype), "device": DEVICE}},
     )
-    _pipe = AutoPipelineForText2Image.from_pretrained(
+    _pipe = ZImagePipeline.from_pretrained(
         MODEL_ID,
         torch_dtype=torch_dtype,
-        variant=None,
+        low_cpu_mem_usage=False,
     )
     _pipe = _pipe.to(DEVICE)
     _pipe.set_progress_bar_config(disable=True)

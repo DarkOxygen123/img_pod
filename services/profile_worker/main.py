@@ -8,7 +8,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import torch
-from diffusers import AutoPipelineForText2Image
+from diffusers import ZImagePipeline
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -48,7 +48,11 @@ async def startup() -> None:
     global _pipe
     t0 = time.time()
     logger.info("loading_profile_text2img_model", extra={"extra_fields": {"model_id": MODEL_ID}})
-    _pipe = AutoPipelineForText2Image.from_pretrained(MODEL_ID, torch_dtype=torch.bfloat16)
+    _pipe = ZImagePipeline.from_pretrained(
+        MODEL_ID,
+        torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=False,
+    )
     _pipe = _pipe.to(DEVICE)
     _pipe.set_progress_bar_config(disable=True)
     logger.info("loaded_profile_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
