@@ -1,0 +1,23 @@
+# Copy to config/config.yaml and adjust values per pod
+interface:
+  host: "0.0.0.0"
+  port: 8000
+  retry_after_cap_ms: 120000
+  profile_queue_max: 10
+  text2img_queue_max: 10
+  regen_attempts: 2  # total attempts including first
+  profile_sla_ms: 10000
+  text2img_sla_ms: 8000
+  llm_service_url: "https://z8xu5cpyevi44q-8002.proxy.runpod.net"
+  profile_worker_url: "https://je5fxki9i9cekh-8003.proxy.runpod.net"
+  text2img_worker_urls:
+    - "https://tx5t471v3aljjd-8004.proxy.runpod.net"
+llm_service:
+  host: "0.0.0.0"
+  port: 8002
+profile_worker:
+  host: "0.0.0.0"
+  port: 8003
+text2img_worker:
+  host: "0.0.0.0"
+  port: 8004
