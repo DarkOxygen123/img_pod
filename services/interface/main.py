@@ -131,9 +131,15 @@ text2img_worker = SingleWorker(text2img_queue, text2img_worker_handler)
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    logger.info("interface_startup", extra={"extra_fields": {
+        "profile_worker_url": str(interface_settings.profile_worker_url),
+        "text2img_worker_urls": [str(u) for u in interface_settings.text2img_worker_urls],
+        "llm_service_url": str(interface_settings.llm_service_url)
+    }})
     await profile_worker.start()
     await profile_generate_worker.start()
     await text2img_worker.start()
+    logger.info("interface_workers_started")
 
 
 @app.exception_handler(HTTPException)
@@ -175,33 +181,56 @@ async def enqueue_or_429(queue: BoundedQueue, payload: dict, sla_ms: int, worker
 
 @app.post("/v1/profile/create")
 async def profile_create(file: UploadFile = File(...)) -> Response:
+    logger.info("profile_create_start", extra={"extra_fields": {"filename": file.filename, "content_type": file.content_type}})
+    
     # Read input selfie
     content = await file.read()
+    logger.info("profile_create_read_file", extra={"extra_fields": {"size_bytes": len(content)}})
+    
     payload = {
         "filename": file.filename,
         "content": content,
         "content_type": file.content_type or "image/png",
     }
+    
     # Queue to profile worker for analysis (features only)
+    logger.info("profile_create_enqueue_analyze", extra={"extra_fields": {"queue_size": profile_queue.size}})
     future = await enqueue_or_429(profile_queue, payload, interface_settings.profile_sla_ms, profile_worker)
+    
     try:
+        logger.info("profile_create_wait_analyze")
         result: dict = await asyncio.wait_for(future, timeout=interface_settings.profile_sla_ms / 1000)
+        logger.info("profile_create_analyze_complete", extra={"extra_fields": {"has_features": "avatar_features" in result}})
     except asyncio.TimeoutError:
+        logger.error("profile_create_analyze_timeout")
         raise HTTPException(status_code=504, detail="Profile worker timed out")
+    except Exception as e:
+        logger.error("profile_create_analyze_error", extra={"extra_fields": {"error": str(e)}})
+        raise
 
     # BAD_SELFIE pass-through
     if result.get("_passthrough_status") == 422:
+        logger.info("profile_create_bad_selfie")
         return JSONResponse(status_code=422, content=result["_passthrough_json"])
 
     # Queue to profile GPU generate (features → PNG)
     gen_payload = {"avatar_features": result["avatar_features"]}
+    logger.info("profile_create_enqueue_generate", extra={"extra_fields": {"queue_size": profile_generate_queue.size}})
     gen_future = await enqueue_or_429(profile_generate_queue, gen_payload, interface_settings.profile_sla_ms, profile_generate_worker)
+    
     try:
+        logger.info("profile_create_wait_generate")
         image_bytes: bytes = await asyncio.wait_for(gen_future, timeout=interface_settings.profile_sla_ms / 1000)
+        logger.info("profile_create_generate_complete", extra={"extra_fields": {"image_size": len(image_bytes)}})
     except asyncio.TimeoutError:
+        logger.error("profile_create_generate_timeout")
         raise HTTPException(status_code=504, detail="Profile generate timed out")
+    except Exception as e:
+        logger.error("profile_create_generate_error", extra={"extra_fields": {"error": str(e)}})
+        raise
 
     # Multipart response: JSON features + PNG image
+    logger.info("profile_create_build_response")
     json_part = ProfileCreateResponse(avatar_features=result["avatar_features"]).model_dump_json()
     boundary = f"boundary-{uuid.uuid4().hex}"
     parts: List[bytes] = []
@@ -213,6 +242,7 @@ async def profile_create(file: UploadFile = File(...)) -> Response:
     )
     parts.append(f"--{boundary}--\r\n".encode())
     body = b"".join(parts)
+    logger.info("profile_create_success", extra={"extra_fields": {"response_size": len(body)}})
     return Response(content=body, media_type=f"multipart/mixed; boundary={boundary}")
 
 @app.get("/healthz")
