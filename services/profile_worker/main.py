@@ -1,4 +1,5 @@
 import base64
+import os
 import io
 import os
 import time
@@ -48,8 +49,16 @@ async def startup() -> None:
     global _pipe
     t0 = time.time()
     logger.info("loading_profile_text2img_model", extra={"extra_fields": {"model_id": MODEL_ID}})
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     _pipe = DiffusionPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.bfloat16)
-    _pipe = _pipe.to(DEVICE)
+    try:
+        _pipe.enable_attention_slicing()
+    except Exception:
+        pass
+    try:
+        _pipe.enable_model_cpu_offload()
+    except Exception:
+        _pipe = _pipe.to(DEVICE)
     _pipe.set_progress_bar_config(disable=True)
     logger.info("loaded_profile_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
 

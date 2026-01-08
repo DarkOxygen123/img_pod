@@ -4,6 +4,7 @@ import time
 import asyncio
 
 import torch
+import os
 from diffusers import DiffusionPipeline
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import Response
@@ -37,12 +38,21 @@ async def load_model() -> None:
     global _pipe
     t0 = time.time()
     torch_dtype = _torch_dtype()
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     logger.info(
         "loading_text2img_model",
         extra={"extra_fields": {"model_id": MODEL_ID, "dtype": str(torch_dtype), "device": DEVICE}},
     )
     _pipe = DiffusionPipeline.from_pretrained(MODEL_ID, torch_dtype=torch_dtype)
-    _pipe = _pipe.to(DEVICE)
+    # reduce VRAM pressure
+    try:
+        _pipe.enable_attention_slicing()
+    except Exception:
+        pass
+    try:
+        _pipe.enable_model_cpu_offload()
+    except Exception:
+        _pipe = _pipe.to(DEVICE)
     _pipe.set_progress_bar_config(disable=True)
     logger.info("loaded_text2img_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
 
