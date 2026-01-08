@@ -19,7 +19,7 @@ This repo contains four FastAPI services:
 
 ## Pod Deployment (Git Pull)
 
-On each pod, keep a checkout at `/app/Sukofinal` and run one service:
+On each pod, keep a checkout at `/workspace/img_pod` (RunPod persistent volume) and run one service:
 
 - CPU pod (public): `./scripts/run_service.sh interface 8000`
 - LLM pod: `./scripts/run_service.sh llm 8002`

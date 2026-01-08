@@ -4,7 +4,7 @@ set -euo pipefail
 SERVICE_PATH=${1:-services/interface}
 PORT=${2:-8000}
 
-cd /app
+cd /workspace/img_pod
 
 echo "Pulling latest code..."
 git pull --rebase

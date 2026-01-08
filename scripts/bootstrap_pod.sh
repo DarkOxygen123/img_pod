@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_URL=${1:-}
-APP_DIR=${2:-/app/Sukofinal}
+APP_DIR=${2:-/workspace/img_pod}
 
 if [[ -z "$REPO_URL" ]]; then
   echo "Usage: bootstrap_pod.sh <git_repo_url> [app_dir]" >&2

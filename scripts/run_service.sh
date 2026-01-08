@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR=${APP_DIR:-/app/Sukofinal}
+APP_DIR=${APP_DIR:-/workspace/img_pod}
 SERVICE=${1:-}
 PORT=${2:-}
 
