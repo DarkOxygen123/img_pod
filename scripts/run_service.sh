@@ -30,9 +30,9 @@ source .venv/bin/activate
 
 # Ensure deps for this service are installed (very lightweight check).
 STAMP="$APP_DIR/.venv/.installed_${SERVICE}"
-# Optional hard cache clear and reinstall on demand
-if [[ "${CLEAR_CACHE:-}" == "1" ]]; then
-  echo "CLEAR_CACHE=1: Purging caches and forcing reinstall..."
+# Default: hard cache clear on every restart unless explicitly disabled
+if [[ "${DISABLE_CLEAR_CACHE:-}" != "1" ]]; then
+  echo "Cache purge: Purging HF/Torch/pip caches and forcing reinstall... (set DISABLE_CLEAR_CACHE=1 to skip)"
   rm -rf "$HOME/.cache/huggingface" "$HOME/.cache/torch" "$HOME/.cache/pip" || true
   rm -rf "/root/.cache/huggingface" "/root/.cache/torch" "/root/.cache/pip" || true
   rm -f "$STAMP" || true
