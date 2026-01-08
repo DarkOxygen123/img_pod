@@ -40,7 +40,10 @@ async def load_llm() -> None:
     global _tokenizer, _model
     t0 = time.time()
     torch_dtype = _torch_dtype()
-    logger.info("loading_llm", extra_fields={"model_id": MODEL_ID, "dtype": str(torch_dtype), "device": DEVICE})
+    logger.info(
+        "loading_llm",
+        extra={"extra_fields": {"model_id": MODEL_ID, "dtype": str(torch_dtype), "device": DEVICE}},
+    )
     _tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, use_fast=True)
     _model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
@@ -48,7 +51,7 @@ async def load_llm() -> None:
         device_map="auto" if DEVICE == "cuda" else None,
     )
     _model.eval()
-    logger.info("loaded_llm", extra_fields={"seconds": round(time.time() - t0, 2)})
+    logger.info("loaded_llm", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
@@ -133,7 +136,7 @@ async def bundle(request: LlmBundleRequest) -> LlmBundleResponse:
     caption = cleaned if len(cleaned) <= 90 else cleaned[:90]
     logger.info(
         "built_prompt_bundle",
-        extra_fields={"final_prompt_len": len(bundle.final_prompt), "caption_len": len(caption)},
+        extra={"extra_fields": {"final_prompt_len": len(bundle.final_prompt), "caption_len": len(caption)}},
     )
     return LlmBundleResponse(prompt_bundle=bundle, caption_text=caption)
 

@@ -50,7 +50,7 @@ class SingleWorker:
             try:
                 await self.handler(item)
             except Exception:  # pragma: no cover - logging safeguard
-                logger.exception("worker_handler_failed", extra_fields={"item": str(item)})
+                logger.exception("worker_handler_failed", extra={"extra_fields": {"item": str(item)}})
             finally:
                 self.queue.task_done()
 

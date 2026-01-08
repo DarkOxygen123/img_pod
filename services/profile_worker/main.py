@@ -47,11 +47,11 @@ def _brightness(gray: np.ndarray) -> float:
 async def startup() -> None:
     global _pipe
     t0 = time.time()
-    logger.info("loading_profile_text2img_model", extra_fields={"model_id": MODEL_ID})
+    logger.info("loading_profile_text2img_model", extra={"extra_fields": {"model_id": MODEL_ID}})
     _pipe = AutoPipelineForText2Image.from_pretrained(MODEL_ID, torch_dtype=torch.bfloat16)
     _pipe = _pipe.to(DEVICE)
     _pipe.set_progress_bar_config(disable=True)
-    logger.info("loaded_profile_model", extra_fields={"seconds": round(time.time() - t0, 2)})
+    logger.info("loaded_profile_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
 
 
 def _profile_prompt(features: FaceProfileFeaturesV1) -> str:

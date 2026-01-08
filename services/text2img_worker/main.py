@@ -37,7 +37,10 @@ async def load_model() -> None:
     global _pipe
     t0 = time.time()
     torch_dtype = _torch_dtype()
-    logger.info("loading_text2img_model", extra_fields={"model_id": MODEL_ID, "dtype": str(torch_dtype), "device": DEVICE})
+    logger.info(
+        "loading_text2img_model",
+        extra={"extra_fields": {"model_id": MODEL_ID, "dtype": str(torch_dtype), "device": DEVICE}},
+    )
     _pipe = AutoPipelineForText2Image.from_pretrained(
         MODEL_ID,
         torch_dtype=torch_dtype,
@@ -45,7 +48,7 @@ async def load_model() -> None:
     )
     _pipe = _pipe.to(DEVICE)
     _pipe.set_progress_bar_config(disable=True)
-    logger.info("loaded_text2img_model", extra_fields={"seconds": round(time.time() - t0, 2)})
+    logger.info("loaded_text2img_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
 
 
 @app.get("/health")
@@ -77,5 +80,8 @@ async def generate(request: WorkerText2ImgRequest = Body(...)) -> Response:
             raise HTTPException(status_code=500, detail=str(exc))
 
     elapsed_ms = int((time.time() - start) * 1000)
-    logger.info("text2img_generated", extra_fields={"elapsed_ms": elapsed_ms, "prompt_len": len(request.prompt), "bytes": len(image_bytes)})
+    logger.info(
+        "text2img_generated",
+        extra={"extra_fields": {"elapsed_ms": elapsed_ms, "prompt_len": len(request.prompt), "bytes": len(image_bytes)}},
+    )
     return Response(content=image_bytes, media_type="image/png")
