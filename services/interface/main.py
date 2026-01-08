@@ -19,6 +19,7 @@ from shared.models import (
 )
 from shared.queue_manager import BoundedQueue, SingleWorker
 from shared.settings import config
+from shared.policy import evaluate_private_chat, sanitize_general
 
 logger = get_logger(__name__)
 app = FastAPI()
@@ -204,7 +205,27 @@ async def profile_update(body: ProfileUpdateRequest = Body(...)) -> Response:
 
 @app.post("/v1/chat/private/imagegen")
 async def chat_private_imagegen(body: ChatPrivateImageGenRequest) -> Response:
-    prompt = f"Chat scene with participants: {body.participants.model_dump_json()} and message: {body.new_message.text}"
+    decision = evaluate_private_chat(body.new_message.text)
+    if decision.blocked:
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(code=PolicyCode.POLICY_BLOCKED, message="POLICY_BLOCKED", details={"reason": decision.reason}).model_dump(),
+        )
+
+    # Call LLM service to build PromptBundle
+    llm_payload = {
+        "participants": body.participants.model_dump(),
+        "chat_history": body.history.model_dump(),
+        "new_message": body.new_message.model_dump(),
+        "mood": {"mood": "neutral", "intensity": 0, "confidence": 0.0, "pending_reply": False, "unreplied_count": 0},
+        "style_request": body.style_request.model_dump(),
+        "is_general": False,
+    }
+    llm_resp = await post_json(str(interface_settings.llm_service_url) + "/v1/bundle", llm_payload, timeout_s=10.0)
+    if llm_resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LLM error: {llm_resp.content.decode(errors='replace')}")
+    bundle = llm_resp.json()["prompt_bundle"]
+    prompt = bundle["final_prompt"]
     worker_url = pick_text2img_worker()
     payload = {
         "worker_url": worker_url,
@@ -226,7 +247,26 @@ async def chat_private_imagegen(body: ChatPrivateImageGenRequest) -> Response:
 
 @app.post("/v1/imagegen")
 async def general_imagegen(body: GeneralImageGenRequest) -> Response:
-    prompt = f"General prompt: {body.prompt.text} participants: {body.participants.model_dump_json()}"
+    decision = sanitize_general(body.prompt.text)
+    if decision.blocked:
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(code=PolicyCode.POLICY_BLOCKED, message="POLICY_BLOCKED", details={"reason": decision.reason}).model_dump(),
+        )
+
+    llm_payload = {
+        "participants": body.participants.model_dump(),
+        "chat_history": {"messages": []},
+        "new_message": {"sent_at": body.prompt.sent_at, "text": decision.sanitized_text or body.prompt.text},
+        "mood": {"mood": "neutral", "intensity": 0, "confidence": 0.0, "pending_reply": False, "unreplied_count": 0},
+        "style_request": body.style_request.model_dump(),
+        "is_general": True,
+    }
+    llm_resp = await post_json(str(interface_settings.llm_service_url) + "/v1/bundle", llm_payload, timeout_s=10.0)
+    if llm_resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"LLM error: {llm_resp.content.decode(errors='replace')}")
+    bundle = llm_resp.json()["prompt_bundle"]
+    prompt = bundle["final_prompt"]
     worker_url = pick_text2img_worker()
     payload = {
         "worker_url": worker_url,

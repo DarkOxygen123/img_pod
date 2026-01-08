@@ -1,0 +1,6 @@
+-r requirements.interface.txt
+Pillow==10.3.0
+torch
+diffusers==0.30.3
+accelerate==0.34.2
+safetensors==0.4.5

@@ -21,6 +21,28 @@ case "$SERVICE" in
   *) echo "Unknown service: $SERVICE" >&2; exit 1 ;;
  esac
 
+# If venv doesn't exist, create it.
+if [[ ! -d "$APP_DIR/.venv" ]]; then
+  python3 -m venv "$APP_DIR/.venv"
+fi
+
+source .venv/bin/activate
+
+# Ensure deps for this service are installed (very lightweight check).
+STAMP="$APP_DIR/.venv/.installed_${SERVICE}"
+if [[ ! -f "$STAMP" ]]; then
+  REQ="requirements.interface.txt"
+  case "$SERVICE" in
+    interface) REQ="requirements.interface.txt" ;;
+    llm) REQ="requirements.llm.txt" ;;
+    profile) REQ="requirements.profile.txt" ;;
+    text2img) REQ="requirements.gpu.txt" ;;
+  esac
+  pip install --upgrade pip
+  pip install -r "$REQ"
+  date > "$STAMP"
+fi
+
 export APP_CONFIG_PATH=${APP_CONFIG_PATH:-"$APP_DIR/config/config.yaml"}
 
 pkill -f "uvicorn ${TARGET}" || true

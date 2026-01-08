@@ -1,0 +1,6 @@
+-r requirements.interface.txt
+transformers==4.45.2
+accelerate==0.34.2
+safetensors==0.4.5
+# Torch install varies by pod; on CUDA pods install a CUDA build of torch.
+# For quick start you can try: pip install torch --index-url https://download.pytorch.org/whl/cu121
