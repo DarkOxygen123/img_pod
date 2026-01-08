@@ -149,12 +149,12 @@ async def enqueue_or_429(queue: BoundedQueue, payload: dict, sla_ms: int, worker
 
 
 @app.post("/v1/profile/create")
-async def profile_create(selfie: UploadFile = File(...)) -> Response:
-    content = await selfie.read()
+async def profile_create(file: UploadFile = File(...)) -> Response:
+    content = await file.read()
     payload = {
-        "filename": selfie.filename,
+        "filename": file.filename,
         "content": content,
-        "content_type": selfie.content_type or "image/png",
+        "content_type": file.content_type or "image/png",
     }
     future = await enqueue_or_429(profile_queue, payload, interface_settings.profile_sla_ms, profile_worker)
     try:

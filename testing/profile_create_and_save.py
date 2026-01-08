@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import re
 from pathlib import Path
@@ -55,8 +56,23 @@ async def profile_create(interface_base_url: str, selfie_path: Path) -> Tuple[Di
     url = interface_base_url.rstrip("/") + "/v1/profile/create"
     file_bytes = selfie_path.read_bytes()
 
+    suffix = selfie_path.suffix.lower()
+    if suffix in {".jpg", ".jpeg"}:
+        content_type = "image/jpeg"
+    elif suffix == ".png":
+        content_type = "image/png"
+    else:
+        raise ValueError(f"Unsupported selfie type: {selfie_path.name}")
+
     async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(url, files={"selfie": (selfie_path.name, file_bytes, "image/png")})
+        # Interface may expect either form field name; send both.
+        resp = await client.post(
+            url,
+            files={
+                "file": (selfie_path.name, file_bytes, content_type),
+                "selfie": (selfie_path.name, file_bytes, content_type),
+            },
+        )
 
     if resp.status_code == 422:
         # BAD_SELFIE pass-through
@@ -70,20 +86,46 @@ async def profile_create(interface_base_url: str, selfie_path: Path) -> Tuple[Di
 
 
 async def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--base_url",
+        default=None,
+        help="Interface base URL (defaults to testing/config.json interface_base_url)",
+    )
+    parser.add_argument(
+        "--input_dir",
+        default=None,
+        help="Directory containing selfies (.jpg/.jpeg/.png). Defaults to testing/input_selfies",
+    )
+    parser.add_argument(
+        "--out_dir",
+        default=None,
+        help="Output directory. Defaults to testing/output",
+    )
+    args = parser.parse_args()
+
     cfg = load_config()
-    interface = cfg["interface_base_url"]
+    interface = args.base_url or cfg["interface_base_url"]
 
     base = Path(__file__).resolve().parent
-    input_dir = base / "input_selfies"
-    out_dir = base / "output"
+    input_dir = Path(args.input_dir) if args.input_dir else (base / "input_selfies")
+    out_dir = Path(args.out_dir) if args.out_dir else (base / "output")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    selfies = [input_dir / "selfie_1.png", input_dir / "selfie_2.png"]
+    if not input_dir.exists():
+        raise SystemExit(f"Missing input_dir: {input_dir}")
+
+    selfies = sorted(
+        [
+            *input_dir.glob("*.jpg"),
+            *input_dir.glob("*.jpeg"),
+            *input_dir.glob("*.png"),
+        ]
+    )
+    if not selfies:
+        raise SystemExit(f"No selfies found in {input_dir} (expected .jpg/.jpeg/.png)")
 
     for selfie in selfies:
-        if not selfie.exists():
-            raise SystemExit(f"Missing selfie: {selfie}. Run generate_test_selfies.py first.")
-
         json_part, image_bytes = await profile_create(interface, selfie)
 
         stem = selfie.stem
