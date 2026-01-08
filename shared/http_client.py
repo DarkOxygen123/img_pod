@@ -29,7 +29,11 @@ async def post_json(
 ) -> HttpResponse:
     async with httpx.AsyncClient(timeout=timeout_s) as client:
         resp = await client.post(url, json=payload, headers=headers)
-        return HttpResponse(status_code=resp.status_code, headers=dict(resp.headers), content=resp.content)
+        # Remove content-encoding header to prevent double-decompression
+        headers_dict = dict(resp.headers)
+        headers_dict.pop('content-encoding', None)
+        headers_dict.pop('Content-Encoding', None)
+        return HttpResponse(status_code=resp.status_code, headers=headers_dict, content=resp.content)
 
 
 async def post_multipart_file(
@@ -46,4 +50,8 @@ async def post_multipart_file(
     files = {field_name: (filename, file_bytes, content_type)}
     async with httpx.AsyncClient(timeout=timeout_s) as client:
         resp = await client.post(url, files=files, data=data, headers=headers)
-        return HttpResponse(status_code=resp.status_code, headers=dict(resp.headers), content=resp.content)
+        # Remove content-encoding header to prevent double-decompression
+        headers_dict = dict(resp.headers)
+        headers_dict.pop('content-encoding', None)
+        headers_dict.pop('Content-Encoding', None)
+        return HttpResponse(status_code=resp.status_code, headers=headers_dict, content=resp.content)
