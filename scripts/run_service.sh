@@ -52,7 +52,12 @@ fi
 
 export APP_CONFIG_PATH=${APP_CONFIG_PATH:-"$APP_DIR/config/config.yaml"}
 
-pkill -f "uvicorn ${TARGET}" || true
+# Kill any existing process on this port
+echo "Killing any existing process on port $PORT..."
+pkill -f "uvicorn.*${SERVICE}.*${PORT}" || true
+lsof -ti:$PORT | xargs -r kill -9 || true
+sleep 1
+
 nohup uvicorn "$TARGET" --host 0.0.0.0 --port "$PORT" > "/tmp/${SERVICE}-${PORT}.log" 2>&1 &
 
 echo "Started $SERVICE on port $PORT (logs: /tmp/${SERVICE}-${PORT}.log)"
