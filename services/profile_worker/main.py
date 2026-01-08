@@ -175,3 +175,9 @@ async def root_compat(selfie: UploadFile = File(None), file: UploadFile = File(N
         "image_bytes_b64": base64.b64encode(image_bytes).decode(),
     }
     return JSONResponse(payload)
+
+
+@app.get("/healthz")
+async def healthz() -> JSONResponse:
+    """Health check endpoint."""
+    return JSONResponse({"status": "ok", "model_loaded": _pipe is not None})
