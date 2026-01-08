@@ -34,13 +34,16 @@ class QueueItem:
 
 
 profile_queue = BoundedQueue(capacity=interface_settings.profile_queue_max)
+profile_generate_queue = BoundedQueue(capacity=interface_settings.profile_queue_max)
 text2img_queue = BoundedQueue(capacity=interface_settings.text2img_queue_max)
 worker_index = 0
 
 
 async def call_profile_worker(payload: dict) -> dict:
+    # Step 1: analyze selfie to extract features
+    analyze_url = str(interface_settings.profile_worker_url).rstrip("/") + "/v1/profile/analyze"
     resp = await post_multipart_file(
-        str(interface_settings.profile_worker_url),
+        analyze_url,
         field_name="selfie",
         filename=payload["filename"],
         file_bytes=payload["content"],
@@ -52,6 +55,20 @@ async def call_profile_worker(payload: dict) -> dict:
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
     return resp.json()
+
+
+async def call_profile_generate(avatar_features: dict) -> bytes:
+    """Generate profile image from features via profile GPU."""
+    generate_url = str(interface_settings.profile_worker_url).rstrip("/") + "/v1/profile/generate"
+    resp = await post_json(
+        generate_url,
+        {"avatar_features": avatar_features},
+        timeout_s=interface_settings.profile_sla_ms / 1000,
+    )
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
+    image_b64 = resp.json()["image_bytes_b64"]
+    return base64.b64decode(image_b64)
 
 
 def pick_text2img_worker() -> str:
@@ -96,18 +113,26 @@ async def profile_worker_handler(item: QueueItem) -> None:
     item.future.set_result(result)
 
 
+async def profile_generate_handler(item: QueueItem) -> None:
+    """Queue handler for profile image generation from features."""
+    image_bytes = await call_profile_generate(item.payload["avatar_features"])
+    item.future.set_result(image_bytes)
+
+
 async def text2img_worker_handler(item: QueueItem) -> None:
     result = await call_text2img_worker(item.payload)
     item.future.set_result(result)
 
 
 profile_worker = SingleWorker(profile_queue, profile_worker_handler)
+profile_generate_worker = SingleWorker(profile_generate_queue, profile_generate_handler)
 text2img_worker = SingleWorker(text2img_queue, text2img_worker_handler)
 
 
 @app.on_event("startup")
 async def startup_event() -> None:
     await profile_worker.start()
+    await profile_generate_worker.start()
     await text2img_worker.start()
 
 
@@ -150,23 +175,34 @@ async def enqueue_or_429(queue: BoundedQueue, payload: dict, sla_ms: int, worker
 
 @app.post("/v1/profile/create")
 async def profile_create(file: UploadFile = File(...)) -> Response:
+    # Read input selfie
     content = await file.read()
     payload = {
         "filename": file.filename,
         "content": content,
         "content_type": file.content_type or "image/png",
     }
+    # Queue to profile worker for analysis (features only)
     future = await enqueue_or_429(profile_queue, payload, interface_settings.profile_sla_ms, profile_worker)
     try:
         result: dict = await asyncio.wait_for(future, timeout=interface_settings.profile_sla_ms / 1000)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Profile worker timed out")
 
+    # BAD_SELFIE pass-through
     if result.get("_passthrough_status") == 422:
         return JSONResponse(status_code=422, content=result["_passthrough_json"])
 
+    # Queue to profile GPU generate (features → PNG)
+    gen_payload = {"avatar_features": result["avatar_features"]}
+    gen_future = await enqueue_or_429(profile_generate_queue, gen_payload, interface_settings.profile_sla_ms, profile_generate_worker)
+    try:
+        image_bytes: bytes = await asyncio.wait_for(gen_future, timeout=interface_settings.profile_sla_ms / 1000)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Profile generate timed out")
+
+    # Multipart response: JSON features + PNG image
     json_part = ProfileCreateResponse(avatar_features=result["avatar_features"]).model_dump_json()
-    image_bytes = base64.b64decode(result["image_bytes_b64"])
     boundary = f"boundary-{uuid.uuid4().hex}"
     parts: List[bytes] = []
     parts.append(f"--{boundary}\r\nContent-Type: application/json\r\n\r\n{json_part}\r\n".encode())
@@ -179,27 +215,27 @@ async def profile_create(file: UploadFile = File(...)) -> Response:
     body = b"".join(parts)
     return Response(content=body, media_type=f"multipart/mixed; boundary={boundary}")
 
+@app.get("/healthz")
+async def health() -> JSONResponse:
+    return JSONResponse(
+        {
+            "status": "ok",
+            "profile_worker_url": str(interface_settings.profile_worker_url),
+            "text2img_worker_urls": [str(u) for u in interface_settings.text2img_worker_urls],
+            "llm_service_url": str(interface_settings.llm_service_url),
+        }
+    )
+
 
 @app.post("/v1/profile/update")
 async def profile_update(body: ProfileUpdateRequest = Body(...)) -> Response:
-    # For now, reuse text2img worker with identity prompt.
-    prompt = f"Profile portrait of user with traits: {body.avatar_features.model_dump_json()}"
-    worker_url = pick_text2img_worker()
-    payload = {
-        "worker_url": worker_url,
-        "body": {
-            "prompt": prompt,
-            "height": 1024,
-            "width": 1024,
-            "num_inference_steps": 9,
-            "guidance_scale": 0.0,
-        },
-    }
-    future = await enqueue_or_429(text2img_queue, payload, interface_settings.text2img_sla_ms, text2img_worker)
+    # Queue features to profile GPU generate
+    gen_payload = {"avatar_features": body.avatar_features.model_dump()}
+    gen_future = await enqueue_or_429(profile_generate_queue, gen_payload, interface_settings.profile_sla_ms, profile_generate_worker)
     try:
-        image_bytes: bytes = await asyncio.wait_for(future, timeout=interface_settings.text2img_sla_ms / 1000)
+        image_bytes: bytes = await asyncio.wait_for(gen_future, timeout=interface_settings.profile_sla_ms / 1000)
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Text2Img worker timed out")
+        raise HTTPException(status_code=504, detail="Profile generate timed out")
     return Response(content=image_bytes, media_type="image/png")
 
 

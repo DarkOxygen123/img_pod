@@ -10,7 +10,7 @@ import mediapipe as mp
 import numpy as np
 import torch
 from diffusers import DiffusionPipeline
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from shared.logging_config import get_logger
@@ -63,16 +63,15 @@ async def startup() -> None:
     logger.info("loaded_profile_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
 
 
-def _profile_prompt(features: FaceProfileFeaturesV1) -> str:
-    observed = features.observed.model_dump()
+def _profile_prompt(features: dict) -> str:
+    """Build preset prompt from features dict (not model instance)."""
+    observed = features.get("observed", {})
     bits = [f"{k.replace('_',' ')} {v}" for k, v in observed.items() if v]
     desc = ", ".join(bits) if bits else "pleasant face"
-    return f"High quality profile portrait, {desc}, 3D render, cinematic lighting, eyes visible"
+    return f"High quality profile portrait, {desc}, Disney 3D animated style, cinematic lighting, expressive eyes, professional studio quality"
 
 
-@app.post("/", response_class=JSONResponse)
-async def handle_selfie(selfie: UploadFile = File(...)) -> JSONResponse:
-    content = await selfie.read()
+def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
     if not content or len(content) < 1024:
         error = {
             "code": "BAD_SELFIE",
@@ -126,11 +125,46 @@ async def handle_selfie(selfie: UploadFile = File(...)) -> JSONResponse:
         observed=FaceObserved(face_shape="oval"),
         meta=FaceMeta(face_detected=True, num_faces=1, quality_score=float(round(quality, 3))),
     )
+    return features
+
+
+@app.post("/v1/profile/analyze", response_class=JSONResponse)
+async def analyze_selfie(selfie: UploadFile = File(None), file: UploadFile = File(None)) -> JSONResponse:
+    """Extract features from selfie image."""
+    if selfie is None and file is None:
+        raise HTTPException(status_code=400, detail="Either 'selfie' or 'file' field required")
+    content = await selfie.read() if selfie is not None else await file.read()  # type: ignore[union-attr]
+    features = _extract_features_from_image(content)
+    return JSONResponse({"avatar_features": features.model_dump()})
+
+
+@app.post("/v1/profile/generate", response_class=JSONResponse)
+async def generate_from_features(avatar_features: dict = Body(...)) -> JSONResponse:
+    """Generate profile image from features JSON. Returns JSON with base64 PNG."""
+    if _pipe is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+
+    prompt = _profile_prompt(avatar_features)
+    out = _pipe(prompt=prompt, height=1024, width=1024, num_inference_steps=9, guidance_scale=0.0)
+    image = out.images[0]
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    image_bytes = buf.getvalue()
+    return JSONResponse({"image_bytes_b64": base64.b64encode(image_bytes).decode()})
+
+
+@app.post("/")
+async def root_compat(selfie: UploadFile = File(None), file: UploadFile = File(None)) -> JSONResponse:
+    """Root endpoint for back-compat: analyze + generate."""
+    if selfie is None and file is None:
+        raise HTTPException(status_code=400, detail="Either 'selfie' or 'file' field required")
+    content = await selfie.read() if selfie is not None else await file.read()  # type: ignore[union-attr]
+    features = _extract_features_from_image(content)
 
     if _pipe is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
-    prompt = _profile_prompt(features)
+    prompt = _profile_prompt(features.model_dump())
     out = _pipe(prompt=prompt, height=1024, width=1024, num_inference_steps=9, guidance_scale=0.0)
     image = out.images[0]
     buf = io.BytesIO()
