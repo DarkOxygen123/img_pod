@@ -3,17 +3,15 @@ import os
 import io
 import os
 import time
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 import cv2
-import mediapipe as mp
 import numpy as np
 import torch
 from diffusers import DiffusionPipeline
 from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
-from PIL import Image
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from insightface.app import FaceAnalysis
 
 from shared.logging_config import get_logger
 from shared.models import FaceMeta, FaceObserved, FaceProfileFeaturesV1
@@ -25,12 +23,9 @@ settings = config.profile_worker_settings()
 
 MODEL_ID = os.getenv("PROFILE_MODEL_ID", "Tongyi-MAI/Z-Image-Turbo")
 DEVICE = os.getenv("PROFILE_DEVICE", "cuda")
-VLM_MODEL_ID = "vikhyatk/moondream2"
-VLM_REVISION = "2024-08-26"
 
 _pipe = None
-_vlm_model = None
-_vlm_tokenizer = None
+_face_analyzer = None
 
 
 def _load_image_bytes(content: bytes) -> Tuple[np.ndarray, int, int]:
@@ -50,42 +45,116 @@ def _brightness(gray: np.ndarray) -> float:
     return float(np.mean(gray))
 
 
-def _extract_facial_features_with_vlm(img_bgr: np.ndarray) -> FaceObserved:
-    """Use VLM to extract facial features from cropped face."""
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    pil_img = Image.fromarray(img_rgb)
+def _get_dominant_color(region: np.ndarray) -> str:
+    """Extract dominant color from image region."""
+    # Convert to RGB and get average color
+    avg_color = np.mean(region, axis=(0, 1)).astype(int)
+    r, g, b = avg_color
     
-    # Ask multiple questions to extract features
-    questions = {
-        "hair_color": "What is the hair color? Answer with one word: black, brown, blonde, red, gray, or white.",
-        "eye_color": "What is the eye color? Answer with one word: brown, blue, green, hazel, or gray.",
-        "nose_bridge": "Describe the nose bridge in one word: narrow, medium, or wide.",
-        "lip_fullness": "Describe the lip fullness in one word: thin, medium, or full.",
-        "skin_tone": "What is the skin tone? Answer with one word: fair, light, medium, tan, or dark.",
-        "age_appearance": "What age group does this person appear to be? Answer with one word: young, middle-aged, or senior.",
-        "gender_presentation": "What gender presentation? Answer with one word: masculine, feminine, or androgynous.",
-        "face_shape": "What is the face shape? Answer with one word: oval, round, square, heart, or diamond."
-    }
+    # Simple color classification
+    if r < 50 and g < 50 and b < 50:
+        return "black"
+    elif r > 200 and g > 200 and b > 200:
+        return "white"
+    elif r > 180 and g < 100 and b < 100:
+        return "red"
+    elif g > r and g > b:
+        return "brown" if g < 150 else "blonde"
+    else:
+        return "brown"
+
+
+def _extract_facial_features_with_insightface(img_bgr: np.ndarray, face_data) -> FaceObserved:
+    """Extract facial features using InsightFace analysis."""
+    h, w = img_bgr.shape[:2]
     
-    features = {}
-    for key, question in questions.items():
-        try:
-            enc_image = _vlm_model.encode_image(pil_img)
-            answer = _vlm_model.answer_question(enc_image, question, _vlm_tokenizer)
-            # Extract first word from answer, lowercase
-            words = answer.lower().strip().split()
-            if words:
-                features[key] = words[0].rstrip('.,;!?')
-        except Exception as e:
-            logger.warning(f"vlm_feature_extraction_failed", extra={"extra_fields": {"feature": key, "error": str(e)}})
-            features[key] = None
+    # Get face bbox for region extraction
+    bbox = face_data.bbox.astype(int)
+    x1, y1, x2, y2 = bbox
     
-    return FaceObserved(**features)
+    # Extract colors from face regions
+    face_img = img_bgr[max(0, y1):min(h, y2), max(0, x1):min(w, x2)]
+    
+    # Hair region (top of bbox)
+    hair_y = max(0, y1 - int((y2 - y1) * 0.3))
+    hair_region = img_bgr[hair_y:y1, x1:x2] if hair_y < y1 else None
+    hair_color = _get_dominant_color(hair_region) if hair_region is not None and hair_region.size > 0 else None
+    
+    # Eye region (upper middle of face)
+    eye_y1 = y1 + int((y2 - y1) * 0.3)
+    eye_y2 = y1 + int((y2 - y1) * 0.5)
+    eye_region = face_img[eye_y1-y1:eye_y2-y1, :] if face_img.size > 0 else None
+    
+    # Simplified eye color (hard to detect accurately)
+    eye_color = "brown"  # Default, would need landmark detection for accuracy
+    
+    # Skin tone from cheek area
+    cheek_y1 = y1 + int((y2 - y1) * 0.4)
+    cheek_y2 = y1 + int((y2 - y1) * 0.7)
+    cheek_x1 = x1 + int((x2 - x1) * 0.2)
+    cheek_x2 = x2 - int((x2 - x1) * 0.2)
+    cheek_region = img_bgr[cheek_y1:cheek_y2, cheek_x1:cheek_x2]
+    
+    skin_avg = np.mean(cheek_region, axis=(0, 1)).astype(int) if cheek_region.size > 0 else [128, 128, 128]
+    brightness = np.mean(skin_avg)
+    
+    if brightness < 80:
+        skin_tone = "dark"
+    elif brightness < 120:
+        skin_tone = "tan"
+    elif brightness < 160:
+        skin_tone = "medium"
+    elif brightness < 200:
+        skin_tone = "light"
+    else:
+        skin_tone = "fair"
+    
+    # Age from InsightFace (if available)
+    age = getattr(face_data, 'age', None)
+    if age is not None:
+        if age < 30:
+            age_appearance = "young"
+        elif age < 50:
+            age_appearance = "middle-aged"
+        else:
+            age_appearance = "senior"
+    else:
+        age_appearance = None
+    
+    # Gender from InsightFace
+    gender = getattr(face_data, 'gender', None)
+    if gender is not None:
+        gender_presentation = "feminine" if gender == 0 else "masculine"
+    else:
+        gender_presentation = None
+    
+    # Face shape (simplified - would need landmarks for accuracy)
+    face_width = x2 - x1
+    face_height = y2 - y1
+    ratio = face_height / face_width if face_width > 0 else 1.0
+    
+    if ratio > 1.4:
+        face_shape = "oval"
+    elif ratio < 1.1:
+        face_shape = "round"
+    else:
+        face_shape = "oval"  # Default
+    
+    return FaceObserved(
+        face_shape=face_shape,
+        hair_color=hair_color,
+        eye_color=eye_color,
+        nose_bridge="medium",  # Placeholder
+        lip_fullness="medium",  # Placeholder
+        skin_tone=skin_tone,
+        age_appearance=age_appearance,
+        gender_presentation=gender_presentation
+    )
 
 
 @app.on_event("startup")
 async def startup() -> None:
-    global _pipe, _vlm_model, _vlm_tokenizer
+    global _pipe, _face_analyzer
     t0 = time.time()
     
     # Load diffusion model
@@ -103,18 +172,12 @@ async def startup() -> None:
     _pipe.set_progress_bar_config(disable=True)
     logger.info("loaded_profile_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
     
-    # Load VLM for feature extraction
+    # Load InsightFace for feature extraction
     t1 = time.time()
-    logger.info("loading_vlm_model", extra={"extra_fields": {"model_id": VLM_MODEL_ID}})
-    _vlm_tokenizer = AutoTokenizer.from_pretrained(VLM_MODEL_ID, revision=VLM_REVISION)
-    _vlm_model = AutoModelForCausalLM.from_pretrained(
-        VLM_MODEL_ID, 
-        trust_remote_code=True, 
-        revision=VLM_REVISION,
-        torch_dtype=torch.float16
-    ).to(DEVICE)
-    _vlm_model.eval()
-    logger.info("loaded_vlm_model", extra={"extra_fields": {"seconds": round(time.time() - t1, 2)}})
+    logger.info("loading_face_analyzer", extra={"extra_fields": {"model": "buffalo_l"}})
+    _face_analyzer = FaceAnalysis(name='buffalo_l', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+    _face_analyzer.prepare(ctx_id=0, det_size=(640, 640))
+    logger.info("loaded_face_analyzer", extra={"extra_fields": {"seconds": round(time.time() - t1, 2)}})
 
 
 def _profile_prompt(features: dict) -> str:
@@ -144,16 +207,11 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         }
         raise HTTPException(status_code=422, detail=error)
 
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    blur = _blur_score(gray)
-    bright = _brightness(gray)
-
-    mp_face = mp.solutions.face_detection
-    with mp_face.FaceDetection(model_selection=1, min_detection_confidence=0.6) as fd:
-        results = fd.process(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-
-    detections = results.detections if results and results.detections else []
-    num_faces = len(detections)
+    # Use InsightFace for detection and analysis
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    faces = _face_analyzer.get(img_rgb)
+    
+    num_faces = len(faces)
     if num_faces != 1:
         error = {
             "code": "BAD_SELFIE",
@@ -162,11 +220,18 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         }
         raise HTTPException(status_code=422, detail=error)
 
-    # crude quality score: normalize blur+brightness
+    face = faces[0]
+    
+    # Quality check based on detection score and image metrics
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    blur = _blur_score(gray)
+    bright = _brightness(gray)
+    
     quality = 0.0
-    quality += min(1.0, blur / 150.0) * 0.6
-    quality += (1.0 - min(1.0, abs(bright - 128.0) / 128.0)) * 0.4
-
+    quality += min(1.0, blur / 150.0) * 0.4
+    quality += (1.0 - min(1.0, abs(bright - 128.0) / 128.0)) * 0.3
+    quality += min(1.0, float(face.det_score)) * 0.3  # Detection confidence
+    
     if quality < 0.35:
         error = {
             "code": "BAD_SELFIE",
@@ -175,8 +240,8 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         }
         raise HTTPException(status_code=422, detail=error)
 
-    # Extract facial features using VLM
-    observed = _extract_facial_features_with_vlm(img_bgr)
+    # Extract facial features using InsightFace
+    observed = _extract_facial_features_with_insightface(img_bgr, face)
     
     features = FaceProfileFeaturesV1(
         observed=observed,
