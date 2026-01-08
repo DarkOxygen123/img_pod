@@ -1,6 +1,7 @@
 -r requirements.interface.txt
 Pillow==10.3.0
 torch
+transformers==4.45.2
 diffusers @ git+https://github.com/huggingface/diffusers
 accelerate==0.34.2
 safetensors==0.4.5
