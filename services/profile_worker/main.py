@@ -51,64 +51,81 @@ def _brightness(gray: np.ndarray) -> float:
 
 def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     """Use Qwen2-VL for visual question answering to extract facial features."""
+    t_start = time.time()
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(img_rgb)
     
     questions = {
         "hair_color": "What is the hair color? Answer with one word: black, brown, blonde, red, gray, or white.",
+        "hair_type": "What is the hair type? Answer with one word: straight, wavy, curly, or coily.",
         "eye_color": "What is the eye color? Answer with one word: brown, blue, green, hazel, or gray.",
         "nose_bridge": "Describe the nose bridge in one word: narrow, medium, or wide.",
         "lip_fullness": "Describe the lip fullness in one word: thin, medium, or full.",
         "skin_tone": "What is the skin tone? Answer with one word: fair, light, medium, tan, or dark.",
         "age_appearance": "What age group does this person appear to be? Answer with one word: young, middle-aged, or senior.",
         "gender_presentation": "What gender presentation? Answer with one word: masculine, feminine, or androgynous.",
-        "face_shape": "What is the face shape? Answer with one word: oval, round, square, heart, or diamond."
+        "face_shape": "What is the face shape? Answer with one word: oval, round, square, heart, or diamond.",
+        "facial_hair_type": "What type of facial hair? Answer with one word: none, mustache, beard, goatee, or stubble.",
+        "facial_hair_length": "If facial hair present, what length? Answer with one word: none, short, medium, or long."
     }
     
+    # Batch process all questions for GPU efficiency
     features = {}
-    for key, question in questions.items():
-        try:
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": pil_img},
-                        {"type": "text", "text": question}
-                    ]
-                }
-            ]
-            
-            text = _vqa_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            image_inputs, video_inputs = process_vision_info(messages)
-            inputs = _vqa_processor(
-                text=[text],
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                return_tensors="pt"
-            ).to(DEVICE)
-            
-            with torch.no_grad():
-                output_ids = _vqa_model.generate(**inputs, max_new_tokens=10)
-            
-            # Decode and extract answer
-            generated_ids = [output_ids[0][len(inputs.input_ids[0]):]]
-            answer = _vqa_processor.batch_decode(
-                generated_ids, 
-                skip_special_tokens=True, 
-                clean_up_tokenization_spaces=False
-            )[0]
-            
-            # Extract first word from answer
-            words = answer.lower().strip().split()
-            if words:
-                features[key] = words[0].rstrip('.,;!?')
-            else:
+    all_messages = []
+    question_keys = list(questions.keys())
+    
+    for key in question_keys:
+        all_messages.append([
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": pil_img},
+                    {"type": "text", "text": questions[key]}
+                ]
+            }
+        ])
+    
+    try:
+        # Process all questions in batch
+        texts = [_vqa_processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True) for msg in all_messages]
+        image_inputs, video_inputs = process_vision_info(all_messages[0])  # Same image for all
+        
+        # Batch all inputs
+        inputs = _vqa_processor(
+            text=texts,
+            images=[image_inputs[0]] * len(texts),  # Same image repeated
+            videos=None,
+            padding=True,
+            return_tensors="pt"
+        ).to(DEVICE)
+        
+        with torch.no_grad():
+            output_ids = _vqa_model.generate(**inputs, max_new_tokens=10)
+        
+        # Decode all answers
+        for idx, key in enumerate(question_keys):
+            try:
+                generated_ids = output_ids[idx][len(inputs.input_ids[idx]):]
+                answer = _vqa_processor.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+                
+                # Extract first word from answer
+                words = answer.lower().strip().split()
+                if words:
+                    features[key] = words[0].rstrip('.,;!?')
+                else:
+                    features[key] = None
+            except Exception as e:
+                logger.warning("vqa_decode_failed", extra={"extra_fields": {"feature": key, "error": str(e)}})
                 features[key] = None
                 
-        except Exception as e:
-            logger.warning("vqa_feature_extraction_failed", extra={"extra_fields": {"feature": key, "error": str(e)}})
+    except Exception as e:
+        logger.error("vqa_batch_failed", extra={"extra_fields": {"error": str(e)}})
+        # Fallback to None for all
+        for key in question_keys:
             features[key] = None
+    
+    t_elapsed = time.time() - t_start
+    logger.info("vqa_extraction_complete", extra={"extra_fields": {"seconds": round(t_elapsed, 2), "num_questions": len(questions)}})
     
     return FaceObserved(**features)
 
@@ -154,6 +171,7 @@ def _profile_prompt(features: dict) -> str:
 
 
 def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
+    t_total = time.time()
     if not content or len(content) < 1024:
         error = {
             "code": "BAD_SELFIE",
@@ -202,13 +220,16 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         }
         raise HTTPException(status_code=422, detail=error)
 
-    # Extract facial features using VQA
+    # Extract facial features using VQA (timed internally)
     observed = _extract_facial_features_with_vqa(img_bgr)
     
     features = FaceProfileFeaturesV1(
         observed=observed,
         meta=FaceMeta(face_detected=True, num_faces=1, quality_score=float(round(quality, 3))),
     )
+    
+    t_elapsed = time.time() - t_total
+    logger.info("feature_extraction_total", extra={"extra_fields": {"seconds": round(t_elapsed, 2)}})
     return features
 
 
@@ -225,6 +246,7 @@ async def analyze_selfie(selfie: UploadFile = File(None), file: UploadFile = Fil
 @app.post("/v1/profile/generate", response_class=JSONResponse)
 async def generate_from_features(avatar_features: dict = Body(...)) -> JSONResponse:
     """Generate profile image from features JSON. Returns JSON with base64 PNG."""
+    t_start = time.time()
     if _pipe is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
@@ -234,6 +256,9 @@ async def generate_from_features(avatar_features: dict = Body(...)) -> JSONRespo
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     image_bytes = buf.getvalue()
+    
+    t_elapsed = time.time() - t_start
+    logger.info("image_generation_complete", extra={"extra_fields": {"seconds": round(t_elapsed, 2), "image_size": len(image_bytes)}})
     return JSONResponse({"image_bytes_b64": base64.b64encode(image_bytes).decode()})
 
 

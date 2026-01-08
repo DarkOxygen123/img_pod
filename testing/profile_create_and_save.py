@@ -64,7 +64,7 @@ async def profile_create(interface_base_url: str, selfie_path: Path) -> Tuple[Di
     else:
         raise ValueError(f"Unsupported selfie type: {selfie_path.name}")
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=240.0) as client:
         # Interface may expect either form field name; send both.
         resp = await client.post(
             url,

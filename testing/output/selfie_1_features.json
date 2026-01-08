@@ -1,14 +1,14 @@
 {
   "avatar_features": {
     "observed": {
-      "face_shape": null,
-      "hair_color": null,
-      "eye_color": null,
-      "nose_bridge": null,
-      "lip_fullness": null,
-      "skin_tone": null,
-      "age_appearance": null,
-      "gender_presentation": null
+      "face_shape": "oval",
+      "hair_color": "black",
+      "eye_color": "brown",
+      "nose_bridge": "narrow",
+      "lip_fullness": "full",
+      "skin_tone": "medium",
+      "age_appearance": "young",
+      "gender_presentation": "androgynous"
     },
     "render_controls": {
       "lighting_preference": null,
