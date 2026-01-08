@@ -3,7 +3,7 @@ import base64
 import uuid
 from typing import List, Optional
 
-import httpx
+from shared.http_client import post_json, post_multipart_file
 from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response
 
@@ -38,17 +38,19 @@ worker_index = 0
 
 
 async def call_profile_worker(payload: dict) -> dict:
-    async with httpx.AsyncClient(timeout=interface_settings.profile_sla_ms / 1000) as client:
-        files = {"selfie": (payload["filename"], payload["content"], payload["content_type"])}
-        resp = await client.post(
-            str(interface_settings.profile_worker_url),
-            files=files,
-        )
-        if resp.status_code == 422:
-            # Pass-through BAD_SELFIE EXACTLY (no wrapping)
-            return {"_passthrough_status": 422, "_passthrough_json": resp.json()}
-        resp.raise_for_status()
-        return resp.json()
+    resp = await post_multipart_file(
+        str(interface_settings.profile_worker_url),
+        field_name="selfie",
+        filename=payload["filename"],
+        file_bytes=payload["content"],
+        content_type=payload["content_type"],
+        timeout_s=interface_settings.profile_sla_ms / 1000,
+    )
+    if resp.status_code == 422:
+        return {"_passthrough_status": 422, "_passthrough_json": resp.json()}
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
+    return resp.json()
 
 
 def pick_text2img_worker() -> str:
@@ -65,22 +67,22 @@ async def call_text2img_worker(payload: dict) -> bytes:
     attempts = interface_settings.regen_attempts
     last_error: Optional[Exception] = None
     for attempt in range(1, attempts + 1):
-        async with httpx.AsyncClient(timeout=interface_settings.text2img_sla_ms / 1000) as client:
-            try:
-                resp = await client.post(
-                    str(payload["worker_url"]),
-                    json=payload["body"],
-                )
-                if resp.status_code >= 400:
-                    last_error = HTTPException(status_code=resp.status_code, detail=resp.text)
-                    continue
-                if len(resp.content) < 512:
-                    last_error = HTTPException(status_code=424, detail="QUALITY_FAILED: tiny output")
-                    continue
-                return resp.content
-            except Exception as exc:  # pragma: no cover - defensive
-                last_error = exc
+        try:
+            resp = await post_json(
+                str(payload["worker_url"]),
+                payload["body"],
+                timeout_s=interface_settings.text2img_sla_ms / 1000,
+            )
+            if resp.status_code >= 400:
+                last_error = HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
                 continue
+            if len(resp.content) < 512:
+                last_error = HTTPException(status_code=424, detail="QUALITY_FAILED: tiny output")
+                continue
+            return resp.content
+        except Exception as exc:  # pragma: no cover - defensive
+            last_error = exc
+            continue
     if last_error:
         if isinstance(last_error, HTTPException) and last_error.status_code == 424:
             raise HTTPException(status_code=424, detail=ErrorResponse(code=PolicyCode.QUALITY_FAILED, message="QUALITY_FAILED", details={"attempts": attempts}).model_dump())
