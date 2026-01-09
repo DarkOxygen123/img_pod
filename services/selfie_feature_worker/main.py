@@ -72,7 +72,25 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         "dress_color": ("What is the main clothing color? Choose only one: black, white, blue, red, green, yellow, gray, brown, pink, purple", 
                        ["black", "white", "blue", "red", "green", "yellow", "gray", "brown", "pink", "purple"]),
         "dress_type": ("What type of clothing? Choose only one: shirt, t-shirt, dress, suit, jacket, sweater, hoodie, blouse", 
-                      ["shirt", "t-shirt", "dress", "suit", "jacket", "sweater", "hoodie", "blouse"])
+                      ["shirt", "t-shirt", "dress", "suit", "jacket", "sweater", "hoodie", "blouse"]),
+        "hat_present": ("Is the person wearing a hat? Answer: yes or no",
+                       ["yes", "no"]),
+        "hat_style": ("If wearing a hat, what style? Choose one: none, baseball-cap, beanie, fedora, cowboy-hat, sun-hat, beret",
+                     ["none", "baseball-cap", "beanie", "fedora", "cowboy-hat", "sun-hat", "beret"]),
+        "hat_color": ("If wearing a hat, what color? Choose one: none, black, white, blue, red, green, gray, brown, tan",
+                     ["none", "black", "white", "blue", "red", "green", "gray", "brown", "tan"]),
+        "glasses_present": ("Is the person wearing glasses? Answer: yes or no",
+                           ["yes", "no"]),
+        "glasses_type": ("If wearing glasses, what type? Choose one: none, reading-glasses, sunglasses, aviators, round-glasses, square-glasses",
+                        ["none", "reading-glasses", "sunglasses", "aviators", "round-glasses", "square-glasses"]),
+        "glasses_color": ("If wearing glasses, what frame color? Choose one: none, black, brown, gold, silver, clear, tortoise",
+                         ["none", "black", "brown", "gold", "silver", "clear", "tortoise"]),
+        "mask_present": ("Is the person wearing a face mask? Answer: yes or no",
+                        ["yes", "no"]),
+        "mask_type": ("If wearing a mask, what type? Choose one: none, surgical, cloth, n95, bandana",
+                     ["none", "surgical", "cloth", "n95", "bandana"]),
+        "mask_color": ("If wearing a mask, what color? Choose one: none, white, blue, black, gray, patterned",
+                      ["none", "white", "blue", "black", "gray", "patterned"])
     }
     
     # Process questions sequentially for reliability
@@ -124,11 +142,12 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     t_elapsed = time.time() - t_start
     logger.info("vqa_extraction_complete", extra={"extra_fields": {"seconds": round(t_elapsed, 2), "num_questions": len(questions_and_options)}})
     
-    # Split into face and dress features
-    face_features = {k: v for k, v in features.items() if k not in ['dress_color', 'dress_type']}
+    # Split into face, dress, and accessory features
+    face_features = {k: v for k, v in features.items() if k not in ['dress_color', 'dress_type', 'hat_present', 'hat_style', 'hat_color', 'glasses_present', 'glasses_type', 'glasses_color', 'mask_present', 'mask_type', 'mask_color']}
     dress_features = {k: v for k, v in features.items() if k in ['dress_color', 'dress_type']}
+    accessory_features = {k: v for k, v in features.items() if k in ['hat_present', 'hat_style', 'hat_color', 'glasses_present', 'glasses_type', 'glasses_color', 'mask_present', 'mask_type', 'mask_color']}
     
-    return face_features, dress_features
+    return face_features, dress_features, accessory_features
 
 
 def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
@@ -175,9 +194,24 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         }
         raise HTTPException(status_code=422, detail=error)
     
-    # Quality check
-    blur = _blur_score(gray)
-    bright = _brightness(gray)
+    # Crop to face region with padding for better VQA framing
+    (x, y, fw, fh) = faces[0]
+    padding_factor = 1.5  # 50% padding around face
+    pad_w = int(fw * (padding_factor - 1) / 2)
+    pad_h = int(fh * (padding_factor - 1) / 2)
+    
+    x1 = max(0, x - pad_w)
+    y1 = max(0, y - pad_h)
+    x2 = min(w, x + fw + pad_w)
+    y2 = min(h, y + fh + pad_h)
+    
+    img_bgr_cropped = img_bgr[y1:y2, x1:x2]
+    logger.info("face_cropped", extra={"extra_fields": {"original": f"{w}x{h}", "cropped": f"{x2-x1}x{y2-y1}"}})
+    
+    # Quality check on cropped face
+    gray_cropped = gray[y1:y2, x1:x2]
+    blur = _blur_score(gray_cropped)
+    bright = _brightness(gray_cropped)
     
     quality = 0.0
     quality += min(1.0, blur / 150.0) * 0.6
@@ -191,13 +225,14 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         }
         raise HTTPException(status_code=422, detail=error)
 
-    # Extract facial and dress features using VQA (timed internally)
-    face_features, dress_features = _extract_facial_features_with_vqa(img_bgr)
+    # Extract facial, dress, and accessory features using VQA (timed internally)
+    face_features, dress_features, accessory_features = _extract_facial_features_with_vqa(img_bgr_cropped)
     
-    from shared.models import DressObserved
+    from shared.models import DressObserved, AccessoriesObserved
     features = FaceProfileFeaturesV1(
         observed=FaceObserved(**face_features),
         dress=DressObserved(**dress_features),
+        accessories=AccessoriesObserved(**accessory_features),
         meta=FaceMeta(face_detected=True, num_faces=1, quality_score=float(round(quality, 3))),
     )
     

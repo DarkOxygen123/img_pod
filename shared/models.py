@@ -21,6 +21,18 @@ class DressObserved(BaseModel):
     dress_type: Optional[str] = None
 
 
+class AccessoriesObserved(BaseModel):
+    hat_present: Optional[str] = None  # yes, no
+    hat_style: Optional[str] = None
+    hat_color: Optional[str] = None
+    glasses_present: Optional[str] = None  # yes, no
+    glasses_type: Optional[str] = None
+    glasses_color: Optional[str] = None
+    mask_present: Optional[str] = None  # yes, no
+    mask_type: Optional[str] = None
+    mask_color: Optional[str] = None
+
+
 class FaceRenderControls(BaseModel):
     lighting_preference: Optional[str] = None
     angle_preference: Optional[str] = None
@@ -35,6 +47,7 @@ class FaceMeta(BaseModel):
 class FaceProfileFeaturesV1(BaseModel):
     observed: FaceObserved = Field(default_factory=FaceObserved)
     dress: DressObserved = Field(default_factory=DressObserved)
+    accessories: AccessoriesObserved = Field(default_factory=AccessoriesObserved)
     meta: FaceMeta = Field(default_factory=FaceMeta)
 
 

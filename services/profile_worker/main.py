@@ -52,6 +52,7 @@ def _profile_prompt(payload: dict) -> str:
     features = payload.get("avatar_features", payload)
     observed = features.get("observed", {})
     dress = features.get("dress", {})
+    accessories = features.get("accessories", {})
     
     # Extract features with defaults
     gender = observed.get("gender") or "person"
@@ -65,6 +66,17 @@ def _profile_prompt(payload: dict) -> str:
     facial_hair = observed.get("facial_hair")
     dress_color = dress.get("dress_color") or "casual"
     dress_type = dress.get("dress_type") or "clothing"
+    
+    # Extract accessories
+    hat_present = accessories.get("hat_present") == "yes"
+    hat_style = accessories.get("hat_style")
+    hat_color = accessories.get("hat_color")
+    glasses_present = accessories.get("glasses_present") == "yes"
+    glasses_type = accessories.get("glasses_type")
+    glasses_color = accessories.get("glasses_color")
+    mask_present = accessories.get("mask_present") == "yes"
+    mask_type = accessories.get("mask_type")
+    mask_color = accessories.get("mask_color")
     
     # Build template-based description
     description_parts = []
@@ -84,6 +96,16 @@ def _profile_prompt(payload: dict) -> str:
     
     # Clothing
     description_parts.append(f"wearing {dress_color} {dress_type}")
+    
+    # Accessories
+    if hat_present and hat_style and hat_style != "none":
+        description_parts.append(f"wearing a {hat_color} {hat_style}")
+    
+    if glasses_present and glasses_type and glasses_type != "none":
+        description_parts.append(f"wearing {glasses_color} {glasses_type}")
+    
+    if mask_present and mask_type and mask_type != "none":
+        description_parts.append(f"wearing a {mask_color} {mask_type}")
     
     full_description = ", ".join(description_parts)
     
