@@ -1,0 +1,7 @@
+-r requirements.interface.txt
+Pillow==10.3.0
+torch
+transformers==4.57.3
+accelerate==1.12.0
+qwen-vl-utils==0.0.8
+opencv-python==4.10.0.84
