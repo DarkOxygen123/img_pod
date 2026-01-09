@@ -3,16 +3,15 @@
     "observed": {
       "face_shape": "oval",
       "hair_color": "black",
+      "hair_type": "curly",
       "eye_color": "brown",
       "nose_bridge": "narrow",
       "lip_fullness": "full",
       "skin_tone": "medium",
       "age_appearance": "young",
-      "gender_presentation": "androgynous"
-    },
-    "render_controls": {
-      "lighting_preference": null,
-      "angle_preference": null
+      "gender_presentation": "androgynous",
+      "facial_hair_type": "none",
+      "facial_hair_length": "none"
     },
     "meta": {
       "face_detected": true,

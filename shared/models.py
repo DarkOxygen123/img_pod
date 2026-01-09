@@ -8,6 +8,7 @@ class FaceObserved(BaseModel):
     face_shape: Optional[str] = None
     hair_color: Optional[str] = None
     hair_type: Optional[str] = None
+    hair_length: Optional[str] = None
     eye_color: Optional[str] = None
     nose_bridge: Optional[str] = None
     lip_fullness: Optional[str] = None

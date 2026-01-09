@@ -58,6 +58,7 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     questions = {
         "hair_color": "What is the hair color? Answer with one word: black, brown, blonde, red, gray, or white.",
         "hair_type": "What is the hair type? Answer with one word: straight, wavy, curly, or coily.",
+        "hair_length": "What is the hair length? Answer with one word: bald, short, medium, or long.",
         "eye_color": "What is the eye color? Answer with one word: brown, blue, green, hazel, or gray.",
         "nose_bridge": "Describe the nose bridge in one word: narrow, medium, or wide.",
         "lip_fullness": "Describe the lip fullness in one word: thin, medium, or full.",
@@ -69,59 +70,48 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         "facial_hair_length": "If facial hair present, what length? Answer with one word: none, short, medium, or long."
     }
     
-    # Batch process all questions for GPU efficiency
+    # Process questions one at a time to avoid batch errors
     features = {}
-    all_messages = []
     question_keys = list(questions.keys())
     
     for key in question_keys:
-        all_messages.append([
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": pil_img},
-                    {"type": "text", "text": questions[key]}
-                ]
-            }
-        ])
-    
-    try:
-        # Process all questions in batch
-        texts = [_vqa_processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True) for msg in all_messages]
-        image_inputs, video_inputs = process_vision_info(all_messages[0])  # Same image for all
-        
-        # Batch all inputs
-        inputs = _vqa_processor(
-            text=texts,
-            images=[image_inputs[0]] * len(texts),  # Same image repeated
-            videos=None,
-            padding=True,
-            return_tensors="pt"
-        ).to(DEVICE)
-        
-        with torch.no_grad():
-            output_ids = _vqa_model.generate(**inputs, max_new_tokens=10)
-        
-        # Decode all answers
-        for idx, key in enumerate(question_keys):
-            try:
-                generated_ids = output_ids[idx][len(inputs.input_ids[idx]):]
-                answer = _vqa_processor.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-                
-                # Extract first word from answer
-                words = answer.lower().strip().split()
-                if words:
-                    features[key] = words[0].rstrip('.,;!?')
-                else:
-                    features[key] = None
-            except Exception as e:
-                logger.warning("vqa_decode_failed", extra={"extra_fields": {"feature": key, "error": str(e)}})
+        try:
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": pil_img},
+                        {"type": "text", "text": questions[key]}
+                    ]
+                }
+            ]
+            
+            text = _vqa_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            image_inputs, video_inputs = process_vision_info(messages)
+            inputs = _vqa_processor(
+                text=[text],
+                images=image_inputs,
+                videos=video_inputs,
+                padding=True,
+                return_tensors="pt"
+            ).to(DEVICE)
+            
+            with torch.no_grad():
+                output_ids = _vqa_model.generate(**inputs, max_new_tokens=10)
+            
+            # Decode answer
+            generated_ids = output_ids[0][len(inputs.input_ids[0]):]
+            answer = _vqa_processor.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+            
+            # Extract first word from answer
+            words = answer.lower().strip().split()
+            if words:
+                features[key] = words[0].rstrip('.,;!?')
+            else:
                 features[key] = None
                 
-    except Exception as e:
-        logger.error("vqa_batch_failed", extra={"extra_fields": {"error": str(e)}})
-        # Fallback to None for all
-        for key in question_keys:
+        except Exception as e:
+            logger.warning("vqa_feature_failed", extra={"extra_fields": {"feature": key, "error": str(e)}})
             features[key] = None
     
     t_elapsed = time.time() - t_start
@@ -165,9 +155,37 @@ async def startup() -> None:
 def _profile_prompt(features: dict) -> str:
     """Build preset prompt from features dict (not model instance)."""
     observed = features.get("observed", {})
-    bits = [f"{k.replace('_',' ')} {v}" for k, v in observed.items() if v]
-    desc = ", ".join(bits) if bits else "pleasant face"
-    return f"High quality profile portrait, {desc}, Disney 3D animated style, front-facing view, centered face, direct gaze, cinematic lighting, expressive eyes, professional studio quality"
+    
+    # Build detailed feature description
+    parts = []
+    if observed.get("hair_color"):
+        parts.append(f"{observed['hair_color']} hair")
+    if observed.get("hair_type"):
+        parts.append(f"{observed['hair_type']} hair texture")
+    if observed.get("hair_length"):
+        parts.append(f"{observed['hair_length']} hair length")
+    if observed.get("eye_color"):
+        parts.append(f"{observed['eye_color']} eyes")
+    if observed.get("skin_tone"):
+        parts.append(f"{observed['skin_tone']} skin tone")
+    if observed.get("nose_bridge"):
+        parts.append(f"{observed['nose_bridge']} nose bridge")
+    if observed.get("lip_fullness"):
+        parts.append(f"{observed['lip_fullness']} lips")
+    if observed.get("face_shape"):
+        parts.append(f"{observed['face_shape']} face shape")
+    if observed.get("facial_hair_type") and observed.get("facial_hair_type") != "none":
+        parts.append(f"{observed['facial_hair_type']}")
+    if observed.get("age_appearance"):
+        parts.append(f"{observed['age_appearance']} appearance")
+    
+    desc = ", ".join(parts) if parts else "pleasant face"
+    
+    # Emphasize adherence to features
+    return (f"Highly detailed 3D Disney Pixar style portrait: {desc}. "
+            f"IMPORTANT: Must accurately depict ALL specified features including hair texture and color. "
+            f"Front-facing view, centered face, direct gaze at camera, cinematic lighting, "
+            f"expressive eyes, professional studio quality, photorealistic rendering")
 
 
 def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
@@ -251,6 +269,8 @@ async def generate_from_features(avatar_features: dict = Body(...)) -> JSONRespo
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     prompt = _profile_prompt(avatar_features)
+    logger.info("profile_prompt_generated", extra={"extra_fields": {"prompt": prompt}})
+    
     out = _pipe(prompt=prompt, height=512, width=512, num_inference_steps=4, guidance_scale=0.0)
     image = out.images[0]
     buf = io.BytesIO()

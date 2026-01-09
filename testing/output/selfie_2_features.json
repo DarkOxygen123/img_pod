@@ -3,16 +3,15 @@
     "observed": {
       "face_shape": null,
       "hair_color": null,
+      "hair_type": null,
       "eye_color": null,
       "nose_bridge": null,
       "lip_fullness": null,
       "skin_tone": null,
       "age_appearance": null,
-      "gender_presentation": null
-    },
-    "render_controls": {
-      "lighting_preference": null,
-      "angle_preference": null
+      "gender_presentation": null,
+      "facial_hair_type": null,
+      "facial_hair_length": null
     },
     "meta": {
       "face_detected": true,
