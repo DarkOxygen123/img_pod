@@ -48,40 +48,53 @@ def _profile_prompt(features: dict) -> str:
     observed = features.get("observed", {})
     dress = features.get("dress", {})
     
-    # Build detailed feature description
-    parts = []
-    if observed.get("gender"):
-        parts.append(f"{observed['gender']}")
-    if observed.get("age_appearance"):
-        parts.append(f"{observed['age_appearance']}")
-    if observed.get("skin_tone"):
-        parts.append(f"{observed['skin_tone']} skin")
-    if observed.get("hair_color"):
-        parts.append(f"{observed['hair_color']} hair")
-    if observed.get("hair_type"):
-        parts.append(f"{observed['hair_type']} texture")
-    if observed.get("hair_length"):
-        parts.append(f"{observed['hair_length']} length")
-    if observed.get("eye_color"):
-        parts.append(f"{observed['eye_color']} eyes")
-    if observed.get("face_shape"):
-        parts.append(f"{observed['face_shape']} face")
-    if observed.get("facial_hair") and observed.get("facial_hair") != "none":
-        parts.append(f"{observed['facial_hair']}")
+    # Extract features with defaults
+    gender = observed.get("gender") or "person"
+    age = observed.get("age_appearance") or "adult"
+    skin_tone = observed.get("skin_tone") or "natural"
+    hair_color = observed.get("hair_color") or "dark"
+    hair_type = observed.get("hair_type") or "natural"
+    hair_length = observed.get("hair_length") or "medium"
+    eye_color = observed.get("eye_color") or "brown"
+    face_shape = observed.get("face_shape") or "oval"
+    facial_hair = observed.get("facial_hair")
+    dress_color = dress.get("dress_color") or "casual"
+    dress_type = dress.get("dress_type") or "clothing"
     
-    # Add dress features
-    if dress.get("dress_type"):
-        parts.append(f"wearing {dress['dress_color'] or ''} {dress['dress_type']}".strip())
+    # Build template-based description
+    description_parts = []
     
-    desc = ", ".join(parts) if parts else "person"
+    # Core identity
+    description_parts.append(f"A {age} {gender}")
     
-    # Waist-level professional profile photo with accurate features
-    return (f"Professional portrait from waist up: {desc}. "
-            f"CRITICAL: Accurately depict ALL specified features - hair texture must be {observed.get('hair_type', 'natural')}, "
-            f"hair color {observed.get('hair_color', 'as shown')}, skin tone {observed.get('skin_tone', 'realistic')}. "
-            f"3D Disney Pixar animation style, front-facing centered, direct eye contact, "
-            f"upper body visible, cinematic studio lighting, expressive features, "
-            f"professional quality, photorealistic details")
+    # Facial features
+    description_parts.append(f"with {skin_tone} skin tone")
+    description_parts.append(f"{hair_color} {hair_type} hair ({hair_length} length)")
+    description_parts.append(f"{eye_color} eyes")
+    description_parts.append(f"{face_shape} face shape")
+    
+    # Facial hair if present
+    if facial_hair and facial_hair != "none":
+        description_parts.append(f"{facial_hair} facial hair")
+    
+    # Clothing
+    description_parts.append(f"wearing {dress_color} {dress_type}")
+    
+    full_description = ", ".join(description_parts)
+    
+    # Build final prompt with emphasis on accuracy
+    return (
+        f"Professional waist-up portrait: {full_description}. "
+        f"CRITICAL REQUIREMENTS: "
+        f"Hair MUST be {hair_type} texture with {hair_color} color and {hair_length} length. "
+        f"Skin tone MUST be {skin_tone}. "
+        f"Eyes MUST be {eye_color}. "
+        f"Face shape MUST be {face_shape}. "
+        f"Style: 3D Disney Pixar animation, photorealistic details, "
+        f"front-facing centered composition, direct eye contact with camera, "
+        f"upper body visible from waist up, cinematic studio lighting, "
+        f"expressive facial features, professional quality rendering"
+    )
 
 
 @app.get("/healthz")
