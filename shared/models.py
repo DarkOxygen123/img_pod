@@ -10,13 +10,15 @@ class FaceObserved(BaseModel):
     hair_type: Optional[str] = None
     hair_length: Optional[str] = None
     eye_color: Optional[str] = None
-    nose_bridge: Optional[str] = None
-    lip_fullness: Optional[str] = None
     skin_tone: Optional[str] = None
     age_appearance: Optional[str] = None
-    gender_presentation: Optional[str] = None
-    facial_hair_type: Optional[str] = None
-    facial_hair_length: Optional[str] = None
+    gender: Optional[str] = None
+    facial_hair: Optional[str] = None
+
+
+class DressObserved(BaseModel):
+    dress_color: Optional[str] = None
+    dress_type: Optional[str] = None
 
 
 class FaceRenderControls(BaseModel):
@@ -32,6 +34,7 @@ class FaceMeta(BaseModel):
 
 class FaceProfileFeaturesV1(BaseModel):
     observed: FaceObserved = Field(default_factory=FaceObserved)
+    dress: DressObserved = Field(default_factory=DressObserved)
     meta: FaceMeta = Field(default_factory=FaceMeta)
 
 

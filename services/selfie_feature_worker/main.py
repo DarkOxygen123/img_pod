@@ -50,18 +50,17 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     pil_img = Image.fromarray(img_rgb)
     
     questions = {
-        "hair_color": "What is the hair color? Answer with one word: black, brown, blonde, red, gray, or white.",
-        "hair_type": "What is the hair type? Answer with one word: straight, wavy, curly, or coily.",
-        "hair_length": "What is the hair length? Answer with one word: bald, short, medium, or long.",
-        "eye_color": "What is the eye color? Answer with one word: brown, blue, green, hazel, or gray.",
-        "nose_bridge": "Describe the nose bridge in one word: narrow, medium, or wide.",
-        "lip_fullness": "Describe the lip fullness in one word: thin, medium, or full.",
-        "skin_tone": "What is the skin tone? Answer with one word: fair, light, medium, tan, or dark.",
-        "age_appearance": "What age group does this person appear to be? Answer with one word: young, middle-aged, or senior.",
-        "gender_presentation": "What gender presentation? Answer with one word: masculine, feminine, or androgynous.",
-        "face_shape": "What is the face shape? Answer with one word: oval, round, square, heart, or diamond.",
-        "facial_hair_type": "What type of facial hair? Answer with one word: none, mustache, beard, goatee, or stubble.",
-        "facial_hair_length": "If facial hair present, what length? Answer with one word: none, short, medium, or long."
+        "hair_color": "Hair color? One word: black, brown, blonde, red, gray, white.",
+        "hair_type": "Hair texture? One word: straight, wavy, curly, coily, afro.",
+        "hair_length": "Hair length? One word: bald, very-short, short, medium, long.",
+        "eye_color": "Eye color? One word: brown, blue, green, hazel, gray.",
+        "skin_tone": "Skin tone? One word: fair, light, medium, tan, dark, deep.",
+        "age_appearance": "Age group? One word: young, middle-aged, senior.",
+        "gender": "Gender? One word only: male or female.",
+        "facial_hair": "Facial hair? One word: none, stubble, mustache, beard, goatee.",
+        "face_shape": "Face shape? One word: oval, round, square, heart, diamond.",
+        "dress_color": "Main clothing color? One word: black, white, blue, red, green, yellow, gray, brown, pink, purple.",
+        "dress_type": "Clothing type? One word: shirt, t-shirt, dress, suit, jacket, sweater, hoodie, blouse."
     }
     
     # Process questions sequentially for reliability
@@ -91,7 +90,7 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             ).to(DEVICE)
             
             with torch.no_grad():
-                output_ids = _vqa_model.generate(**inputs, max_new_tokens=10)
+                output_ids = _vqa_model.generate(**inputs, max_new_tokens=5)
             
             # Decode answer
             generated_ids = output_ids[0][len(inputs.input_ids[0]):]
@@ -111,7 +110,11 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     t_elapsed = time.time() - t_start
     logger.info("vqa_extraction_complete", extra={"extra_fields": {"seconds": round(t_elapsed, 2), "num_questions": len(questions)}})
     
-    return FaceObserved(**features)
+    # Split into face and dress features
+    face_features = {k: v for k, v in features.items() if k not in ['dress_color', 'dress_type']}
+    dress_features = {k: v for k, v in features.items() if k in ['dress_color', 'dress_type']}
+    
+    return face_features, dress_features
 
 
 def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
@@ -164,11 +167,13 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         }
         raise HTTPException(status_code=422, detail=error)
 
-    # Extract facial features using VQA (timed internally)
-    observed = _extract_facial_features_with_vqa(img_bgr)
+    # Extract facial and dress features using VQA (timed internally)
+    face_features, dress_features = _extract_facial_features_with_vqa(img_bgr)
     
+    from shared.models import DressObserved
     features = FaceProfileFeaturesV1(
-        observed=observed,
+        observed=FaceObserved(**face_features),
+        dress=DressObserved(**dress_features),
         meta=FaceMeta(face_detected=True, num_faces=1, quality_score=float(round(quality, 3))),
     )
     

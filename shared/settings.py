@@ -15,7 +15,7 @@ class InterfaceSettings(BaseSettings):
     profile_queue_max: int = 10
     text2img_queue_max: int = 10
     regen_attempts: int = 2
-    profile_sla_ms: int = 60_000
+    profile_sla_ms: int = 90_000
     text2img_sla_ms: int = 8_000
     llm_service_url: HttpUrl = "https://z8xu5cpyevi44q-8002.proxy.runpod.net"
     selfie_feature_worker_url: HttpUrl = "https://aknn9iryuo4tr1-8003.proxy.runpod.net"

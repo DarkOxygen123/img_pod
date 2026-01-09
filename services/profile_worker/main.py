@@ -46,39 +46,42 @@ async def startup() -> None:
 def _profile_prompt(features: dict) -> str:
     """Build preset prompt from features dict for waist-level profile photo."""
     observed = features.get("observed", {})
+    dress = features.get("dress", {})
     
     # Build detailed feature description
     parts = []
+    if observed.get("gender"):
+        parts.append(f"{observed['gender']}")
+    if observed.get("age_appearance"):
+        parts.append(f"{observed['age_appearance']}")
+    if observed.get("skin_tone"):
+        parts.append(f"{observed['skin_tone']} skin")
     if observed.get("hair_color"):
         parts.append(f"{observed['hair_color']} hair")
     if observed.get("hair_type"):
-        parts.append(f"{observed['hair_type']} hair texture")
+        parts.append(f"{observed['hair_type']} texture")
     if observed.get("hair_length"):
-        parts.append(f"{observed['hair_length']} hair length")
+        parts.append(f"{observed['hair_length']} length")
     if observed.get("eye_color"):
         parts.append(f"{observed['eye_color']} eyes")
-    if observed.get("skin_tone"):
-        parts.append(f"{observed['skin_tone']} skin tone")
-    if observed.get("nose_bridge"):
-        parts.append(f"{observed['nose_bridge']} nose bridge")
-    if observed.get("lip_fullness"):
-        parts.append(f"{observed['lip_fullness']} lips")
     if observed.get("face_shape"):
-        parts.append(f"{observed['face_shape']} face shape")
-    if observed.get("facial_hair_type") and observed.get("facial_hair_type") != "none":
-        parts.append(f"{observed['facial_hair_type']}")
-    if observed.get("age_appearance"):
-        parts.append(f"{observed['age_appearance']} appearance")
+        parts.append(f"{observed['face_shape']} face")
+    if observed.get("facial_hair") and observed.get("facial_hair") != "none":
+        parts.append(f"{observed['facial_hair']}")
     
-    desc = ", ".join(parts) if parts else "pleasant face"
+    # Add dress features
+    if dress.get("dress_type"):
+        parts.append(f"wearing {dress['dress_color'] or ''} {dress['dress_type']}".strip())
     
-    # Waist-level professional profile photo
-    return (f"Professional portrait photo from waist up: {desc}. "
-            f"IMPORTANT: Must accurately depict ALL specified features including hair texture and color. "
-            f"3D Disney Pixar animation style, front-facing centered composition, "
-            f"direct eye contact with camera, upper body visible, "
-            f"cinematic studio lighting, expressive facial features, "
-            f"professional headshot quality, photorealistic rendering")
+    desc = ", ".join(parts) if parts else "person"
+    
+    # Waist-level professional profile photo with accurate features
+    return (f"Professional portrait from waist up: {desc}. "
+            f"CRITICAL: Accurately depict ALL specified features - hair texture must be {observed.get('hair_type', 'natural')}, "
+            f"hair color {observed.get('hair_color', 'as shown')}, skin tone {observed.get('skin_tone', 'realistic')}. "
+            f"3D Disney Pixar animation style, front-facing centered, direct eye contact, "
+            f"upper body visible, cinematic studio lighting, expressive features, "
+            f"professional quality, photorealistic details")
 
 
 @app.get("/healthz")
