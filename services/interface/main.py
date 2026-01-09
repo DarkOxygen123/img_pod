@@ -40,8 +40,8 @@ worker_index = 0
 
 
 async def call_profile_worker(payload: dict) -> dict:
-    # Step 1: analyze selfie to extract features
-    analyze_url = str(interface_settings.profile_worker_url).rstrip("/") + "/v1/profile/analyze"
+    # Step 1: analyze selfie to extract features (dedicated VQA service)
+    analyze_url = str(interface_settings.selfie_feature_worker_url).rstrip("/") + "/v1/profile/analyze"
     resp = await post_multipart_file(
         analyze_url,
         field_name="selfie",
@@ -132,6 +132,7 @@ text2img_worker = SingleWorker(text2img_queue, text2img_worker_handler)
 @app.on_event("startup")
 async def startup_event() -> None:
     logger.info("interface_startup", extra={"extra_fields": {
+        "selfie_feature_worker_url": str(interface_settings.selfie_feature_worker_url),
         "profile_worker_url": str(interface_settings.profile_worker_url),
         "text2img_worker_urls": [str(u) for u in interface_settings.text2img_worker_urls],
         "llm_service_url": str(interface_settings.llm_service_url)
@@ -250,6 +251,7 @@ async def health() -> JSONResponse:
     return JSONResponse(
         {
             "status": "ok",
+            "selfie_feature_worker_url": str(interface_settings.selfie_feature_worker_url),
             "profile_worker_url": str(interface_settings.profile_worker_url),
             "text2img_worker_urls": [str(u) for u in interface_settings.text2img_worker_urls],
             "llm_service_url": str(interface_settings.llm_service_url),

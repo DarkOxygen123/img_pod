@@ -18,6 +18,7 @@ class InterfaceSettings(BaseSettings):
     profile_sla_ms: int = 60_000
     text2img_sla_ms: int = 8_000
     llm_service_url: HttpUrl = "https://z8xu5cpyevi44q-8002.proxy.runpod.net"
+    selfie_feature_worker_url: HttpUrl = "https://aknn9iryuo4tr1-8003.proxy.runpod.net"
     profile_worker_url: HttpUrl = "https://je5fxki9i9cekh-8003.proxy.runpod.net"
     text2img_worker_urls: List[HttpUrl] = ["https://tx5t471v3aljjd-8004.proxy.runpod.net"]
 
