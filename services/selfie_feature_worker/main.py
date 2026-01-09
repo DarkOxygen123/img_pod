@@ -151,6 +151,16 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         }
         raise HTTPException(status_code=422, detail=error)
 
+    # Resize large images for faster VQA processing
+    max_dimension = 1024
+    if max(h, w) > max_dimension:
+        scale = max_dimension / max(h, w)
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        img_bgr = cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        h, w = new_h, new_w
+        logger.info("image_resized", extra={"extra_fields": {"original_size": f"{w}x{h}", "new_size": f"{new_w}x{new_h}"}})
+
     # Simple face detection with cv2
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)

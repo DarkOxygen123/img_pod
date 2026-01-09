@@ -45,6 +45,9 @@ async def startup() -> None:
 
 def _profile_prompt(features: dict) -> str:
     """Build preset prompt from features dict for waist-level profile photo."""
+    # Log incoming features for debugging
+    logger.info("prompt_features_received", extra={"extra_fields": {"features": features}})
+    
     observed = features.get("observed", {})
     dress = features.get("dress", {})
     
