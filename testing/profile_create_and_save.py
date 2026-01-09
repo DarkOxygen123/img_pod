@@ -125,14 +125,24 @@ async def main() -> None:
     if not selfies:
         raise SystemExit(f"No selfies found in {input_dir} (expected .jpg/.jpeg/.png)")
 
-    for selfie in selfies:
-        json_part, image_bytes = await profile_create(interface, selfie)
+    for i, selfie in enumerate(selfies):
+        try:
+            print(f"\n[{i+1}/{len(selfies)}] Processing {selfie.name}...")
+            json_part, image_bytes = await profile_create(interface, selfie)
 
-        stem = selfie.stem
-        (out_dir / f"{stem}_features.json").write_text(json.dumps(json_part, indent=2), encoding="utf-8")
-        (out_dir / f"{stem}_profile.png").write_bytes(image_bytes)
+            stem = selfie.stem
+            (out_dir / f"{stem}_features.json").write_text(json.dumps(json_part, indent=2), encoding="utf-8")
+            (out_dir / f"{stem}_profile.png").write_bytes(image_bytes)
 
-        print(f"OK {stem}: wrote output/{stem}_features.json and output/{stem}_profile.png")
+            print(f"✅ OK {stem}: wrote output/{stem}_features.json and output/{stem}_profile.png")
+            
+            # Add small delay between requests to prevent overload
+            if i < len(selfies) - 1:
+                await asyncio.sleep(2)
+                
+        except Exception as e:
+            print(f"❌ FAILED {selfie.name}: {type(e).__name__}: {e}")
+            continue
 
 
 if __name__ == "__main__":
