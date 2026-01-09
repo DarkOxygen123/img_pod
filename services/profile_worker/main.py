@@ -43,11 +43,13 @@ async def startup() -> None:
     logger.info("loaded_profile_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
 
 
-def _profile_prompt(features: dict) -> str:
+def _profile_prompt(payload: dict) -> str:
     """Build preset prompt from features dict for waist-level profile photo."""
-    # Log incoming features for debugging
-    logger.info("prompt_features_received", extra={"extra_fields": {"features": features}})
+    # Log incoming payload for debugging
+    logger.info("prompt_payload_received", extra={"extra_fields": {"payload_keys": list(payload.keys())}})
     
+    # Unwrap avatar_features if nested
+    features = payload.get("avatar_features", payload)
     observed = features.get("observed", {})
     dress = features.get("dress", {})
     
@@ -112,6 +114,7 @@ async def generate_from_features(avatar_features: dict = Body(...)) -> JSONRespo
     if _pipe is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
+    # Pass the full dict - prompt function will extract avatar_features
     prompt = _profile_prompt(avatar_features)
     logger.info("profile_prompt_generated", extra={"extra_fields": {"prompt": prompt}})
     

@@ -1,22 +1,24 @@
 {
   "avatar_features": {
     "observed": {
-      "face_shape": null,
-      "hair_color": null,
-      "hair_type": null,
-      "eye_color": null,
-      "nose_bridge": null,
-      "lip_fullness": null,
-      "skin_tone": null,
+      "face_shape": "oval",
+      "hair_color": "brown",
+      "hair_type": "curly",
+      "hair_length": "short",
+      "eye_color": "brown",
+      "skin_tone": "beige",
       "age_appearance": null,
-      "gender_presentation": null,
-      "facial_hair_type": null,
-      "facial_hair_length": null
+      "gender": "male",
+      "facial_hair": "mustache"
+    },
+    "dress": {
+      "dress_color": "gray",
+      "dress_type": null
     },
     "meta": {
       "face_detected": true,
       "num_faces": 1,
-      "quality_score": 0.495
+      "quality_score": 0.982
     }
   }
 }
