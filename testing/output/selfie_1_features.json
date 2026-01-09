@@ -4,16 +4,16 @@
       "face_shape": "the",
       "hair_color": "the",
       "hair_type": "the",
-      "hair_length": "one",
-      "eye_color": "one",
-      "skin_tone": "one",
+      "hair_length": "short",
+      "eye_color": "the",
+      "skin_tone": "medium",
       "age_appearance": "the",
-      "gender": "female",
+      "gender": "the",
       "facial_hair": "none"
     },
     "dress": {
       "dress_color": "yellow",
-      "dress_type": "clothing"
+      "dress_type": "t-shirt"
     },
     "meta": {
       "face_detected": true,

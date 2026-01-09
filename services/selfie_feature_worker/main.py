@@ -49,32 +49,43 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(img_rgb)
     
-    questions = {
-        "hair_color": "What is this person's hair color? Choose only one: black, brown, blonde, red, gray, white",
-        "hair_type": "What is the hair texture? Choose only one: straight, wavy, curly, coily, afro",
-        "hair_length": "What is the hair length? Choose only one: bald, very-short, short, medium, long",
-        "eye_color": "What is the eye color? Choose only one: brown, blue, green, hazel, gray",
-        "skin_tone": "What is the skin tone? Choose only one: fair, light, medium, tan, dark, deep",
-        "age_appearance": "What age group? Choose only one: young, middle-aged, senior",
-        "gender": "Is this person male or female? Answer only: male or female",
-        "facial_hair": "What facial hair is visible? Choose only one: none, stubble, mustache, beard, goatee",
-        "face_shape": "What is the face shape? Choose only one: oval, round, square, heart, diamond",
-        "dress_color": "What is the main clothing color? Choose only one: black, white, blue, red, green, yellow, gray, brown, pink, purple",
-        "dress_type": "What type of clothing? Choose only one: shirt, t-shirt, dress, suit, jacket, sweater, hoodie, blouse"
+    # Define questions and valid options
+    questions_and_options = {
+        "hair_color": ("What is this person's hair color? Choose only one: black, brown, blonde, red, gray, white", 
+                      ["black", "brown", "blonde", "red", "gray", "white"]),
+        "hair_type": ("What is the hair texture? Choose only one: straight, wavy, curly, coily, afro", 
+                     ["straight", "wavy", "curly", "coily", "afro"]),
+        "hair_length": ("What is the hair length? Choose only one: bald, very-short, short, medium, long", 
+                       ["bald", "very-short", "short", "medium", "long"]),
+        "eye_color": ("What is the eye color? Choose only one: brown, blue, green, hazel, gray", 
+                     ["brown", "blue", "green", "hazel", "gray"]),
+        "skin_tone": ("What is the skin tone? Choose only one: fair, light, medium, tan, dark, deep", 
+                     ["fair", "light", "medium", "tan", "dark", "deep"]),
+        "age_appearance": ("What age group? Choose only one: young, middle-aged, senior", 
+                          ["young", "middle-aged", "senior"]),
+        "gender": ("Is this person male or female? Answer only: male or female", 
+                  ["male", "female"]),
+        "facial_hair": ("What facial hair is visible? Choose only one: none, stubble, mustache, beard, goatee", 
+                       ["none", "stubble", "mustache", "beard", "goatee"]),
+        "face_shape": ("What is the face shape? Choose only one: oval, round, square, heart, diamond", 
+                      ["oval", "round", "square", "heart", "diamond"]),
+        "dress_color": ("What is the main clothing color? Choose only one: black, white, blue, red, green, yellow, gray, brown, pink, purple", 
+                       ["black", "white", "blue", "red", "green", "yellow", "gray", "brown", "pink", "purple"]),
+        "dress_type": ("What type of clothing? Choose only one: shirt, t-shirt, dress, suit, jacket, sweater, hoodie, blouse", 
+                      ["shirt", "t-shirt", "dress", "suit", "jacket", "sweater", "hoodie", "blouse"])
     }
     
     # Process questions sequentially for reliability
     features = {}
-    question_keys = list(questions.keys())
     
-    for key in question_keys:
+    for key, (question, valid_options) in questions_and_options.items():
         try:
             messages = [
                 {
                     "role": "user",
                     "content": [
                         {"type": "image", "image": pil_img},
-                        {"type": "text", "text": questions[key]}
+                        {"type": "text", "text": question}
                     ]
                 }
             ]
@@ -96,19 +107,22 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             generated_ids = output_ids[0][len(inputs.input_ids[0]):]
             answer = _vqa_processor.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             
-            # Extract first word from answer
-            words = answer.lower().strip().split()
-            if words:
-                features[key] = words[0].rstrip('.,;!?')
-            else:
-                features[key] = None
+            # Smart extraction: find valid option in the answer
+            answer_lower = answer.lower().strip()
+            found_option = None
+            for option in valid_options:
+                if option in answer_lower:
+                    found_option = option
+                    break
+            
+            features[key] = found_option
                 
         except Exception as e:
             logger.warning("vqa_feature_failed", extra={"extra_fields": {"feature": key, "error": str(e)}})
             features[key] = None
     
     t_elapsed = time.time() - t_start
-    logger.info("vqa_extraction_complete", extra={"extra_fields": {"seconds": round(t_elapsed, 2), "num_questions": len(questions)}})
+    logger.info("vqa_extraction_complete", extra={"extra_fields": {"seconds": round(t_elapsed, 2), "num_questions": len(questions_and_options)}})
     
     # Split into face and dress features
     face_features = {k: v for k, v in features.items() if k not in ['dress_color', 'dress_type']}
