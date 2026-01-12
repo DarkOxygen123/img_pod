@@ -15,6 +15,12 @@ git pull
 
 echo "[2/5] Installing dependencies..."
 pip install --upgrade pip
+pip install --upgrade --force-reinstall \
+    "transformers==4.57.3" \
+    "tokenizers>=0.22.0" \
+    "protobuf>=3.20.0" \
+    "sentencepiece>=0.1.99" \
+    "safetensors==0.7.0"
 pip install -r requirements.llm.txt
 
 echo "[3/5] Stopping existing service..."
