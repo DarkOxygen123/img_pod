@@ -89,18 +89,22 @@ def _extract_facial_hair_with_vqa(img_bgr: np.ndarray) -> dict:
             return None
 
     schema = {
-        "facial_hair": [
+        # Split beard and mustache so both can be present.
+        "beard_style": [
             "none",
             "stubble",
-            "light-mustache",
-            "mustache",
-            "chevron-mustache",
-            "handlebar-mustache",
             "goatee",
             "trimmed-beard",
             "short-boxed-beard",
             "full-beard",
             "long-beard",
+        ],
+        "mustache_style": [
+            "none",
+            "light-mustache",
+            "mustache",
+            "chevron-mustache",
+            "handlebar-mustache",
         ],
         "facial_hair_density": ["none", "light", "medium", "dense"],
     }
@@ -115,13 +119,14 @@ def _extract_facial_hair_with_vqa(img_bgr: np.ndarray) -> dict:
             "- Values must be one of the allowed options for that key, or null.",
             "- If the lower face is not visible/occluded/too blurry, use null.",
             "Definitions:",
-            "- none: clean-shaven (no visible facial hair)",
-            "- stubble: very short even beard shadow",
-            "- trimmed-beard: short beard, clearly present but kept close",
-            "- short-boxed-beard: defined beard shape along jaw and chin",
-            "- goatee: hair on chin (often with mustache)",
+            "- beard_style none: clean-shaven lower face (no beard)",
+            "- beard_style stubble: very short even beard shadow",
+            "- beard_style trimmed-beard: short beard, kept close",
+            "- beard_style short-boxed-beard: defined beard shape along jaw/chin",
+            "- beard_style goatee: hair on chin (often with mustache)",
             "Keys and allowed options:",
-            f"- facial_hair: {', '.join(schema['facial_hair'])}",
+            f"- beard_style: {', '.join(schema['beard_style'])}",
+            f"- mustache_style: {', '.join(schema['mustache_style'])}",
             f"- facial_hair_density: {', '.join(schema['facial_hair_density'])}",
         ]
     )
@@ -156,7 +161,7 @@ def _extract_facial_hair_with_vqa(img_bgr: np.ndarray) -> dict:
     if not isinstance(parsed, dict):
         return {"facial_hair": None, "facial_hair_density": None}
 
-    out: dict = {"facial_hair": None, "facial_hair_density": None}
+    out: dict = {"beard_style": None, "mustache_style": None, "facial_hair_density": None}
     for k, opts in schema.items():
         v = parsed.get(k)
         if v is None:
@@ -344,6 +349,7 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         ],
         "hairline_type": ["straight", "rounded", "widow-peak", "receding-mild", "receding-deep"],
         "balding_pattern": ["none", "temples", "crown", "front-top", "full-top", "horseshoe"],
+        # Keep legacy field for compatibility; we'll also extract split fields below.
         "facial_hair": [
             "none",
             "stubble",
@@ -356,6 +362,22 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             "short-boxed-beard",
             "full-beard",
             "long-beard",
+        ],
+        "beard_style": [
+            "none",
+            "stubble",
+            "goatee",
+            "trimmed-beard",
+            "short-boxed-beard",
+            "full-beard",
+            "long-beard",
+        ],
+        "mustache_style": [
+            "none",
+            "light-mustache",
+            "mustache",
+            "chevron-mustache",
+            "handlebar-mustache",
         ],
         "facial_hair_density": ["none", "light", "medium", "dense"],
         "facial_marks": ["none", "mole", "freckles", "scar", "acne"],
@@ -451,12 +473,25 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     if gender == "female":
         features["facial_hair"] = "none"
         features["facial_hair_density"] = "none"
+        features["beard_style"] = "none"
+        features["mustache_style"] = "none"
 
     # If a mask is present, lower-face visibility is often poor. Avoid forcing "none".
     if features.get("mask_present") == "yes":
-        if features.get("facial_hair") in (None, "none", "stubble", "light-mustache", "mustache"):
-            features["facial_hair"] = None
-            features["facial_hair_density"] = None
+        features["facial_hair"] = None
+        features["facial_hair_density"] = None
+        features["beard_style"] = None
+        features["mustache_style"] = None
+
+    # Back-compat fill: if split fields are present, keep legacy facial_hair consistent.
+    beard_style = (features.get("beard_style") or "").strip().lower()
+    mustache_style = (features.get("mustache_style") or "").strip().lower()
+    if beard_style and beard_style != "none":
+        features["facial_hair"] = beard_style
+    elif mustache_style and mustache_style != "none":
+        features["facial_hair"] = mustache_style
+    elif beard_style == "none" and mustache_style == "none" and features.get("facial_hair") is None:
+        features["facial_hair"] = "none"
 
     if features.get("facial_marks") in (None, "none"):
         features["facial_mark_position"] = "none"
@@ -715,10 +750,22 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
             x1 = int(w_c * 0.85)
             lower = img_bgr_cropped[y0:h_c, x0:x1]
             fh = _extract_facial_hair_with_vqa(lower)
-            if fh.get("facial_hair") is not None:
-                face_features["facial_hair"] = fh.get("facial_hair")
+            if fh.get("beard_style") is not None:
+                face_features["beard_style"] = fh.get("beard_style")
+            if fh.get("mustache_style") is not None:
+                face_features["mustache_style"] = fh.get("mustache_style")
             if fh.get("facial_hair_density") is not None:
                 face_features["facial_hair_density"] = fh.get("facial_hair_density")
+
+            # Keep legacy field aligned.
+            beard_style2 = str(face_features.get("beard_style") or "").strip().lower()
+            mustache_style2 = str(face_features.get("mustache_style") or "").strip().lower()
+            if beard_style2 and beard_style2 != "none":
+                face_features["facial_hair"] = beard_style2
+            elif mustache_style2 and mustache_style2 != "none":
+                face_features["facial_hair"] = mustache_style2
+            elif beard_style2 == "none" and mustache_style2 == "none":
+                face_features["facial_hair"] = "none"
     except Exception as e:
         logger.warning("facial_hair_second_pass_failed", extra={"extra_fields": {"error": str(e)}})
 

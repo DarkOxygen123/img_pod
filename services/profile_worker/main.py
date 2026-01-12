@@ -77,6 +77,8 @@ def _profile_prompt(payload: dict) -> tuple[str, str]:
     face_shape = observed.get("face_shape") or "oval"
     facial_hair = observed.get("facial_hair")
     facial_hair_density = observed.get("facial_hair_density")
+    beard_style = observed.get("beard_style")
+    mustache_style = observed.get("mustache_style")
     facial_marks = observed.get("facial_marks")
     facial_mark_position = observed.get("facial_mark_position")
     expression = observed.get("expression")
@@ -125,13 +127,37 @@ def _profile_prompt(payload: dict) -> tuple[str, str]:
     if gender == "woman":
         facial_hair = "none"
         facial_hair_density = "none"
-    if facial_hair and facial_hair != "none":
+        beard_style = "none"
+        mustache_style = "none"
+
+    # Prefer split fields if present so we can represent BOTH mustache and beard.
+    beard = (beard_style or "").strip()
+    mustache = (mustache_style or "").strip()
+    if beard and beard != "none" and mustache and mustache != "none":
+        if facial_hair_density and facial_hair_density != "none":
+            description_parts.append(f"with {facial_hair_density} {mustache} mustache and {beard} beard")
+        else:
+            description_parts.append(f"with {mustache} mustache and {beard} beard")
+    elif beard and beard != "none":
+        if facial_hair_density and facial_hair_density != "none":
+            description_parts.append(f"with {facial_hair_density} {beard} beard")
+        else:
+            description_parts.append(f"with {beard} beard")
+    elif mustache and mustache != "none":
+        if facial_hair_density and facial_hair_density != "none":
+            description_parts.append(f"with {facial_hair_density} {mustache} mustache")
+        else:
+            description_parts.append(f"with {mustache} mustache")
+    elif facial_hair and facial_hair != "none":
+        # Fallback: legacy single-field facial hair.
         if facial_hair_density and facial_hair_density != "none":
             description_parts.append(f"with {facial_hair_density} {facial_hair} facial hair")
         else:
             description_parts.append(f"with {facial_hair} facial hair")
-    elif gender == "man" and facial_hair == "none" and not mask_present:
-        # Only assert clean-shaven when we explicitly detected none and the lower face is visible.
+    elif gender == "man" and not mask_present and (
+        (beard == "none" and mustache == "none") or (facial_hair == "none")
+    ):
+        # Only assert clean-shaven when explicitly detected none and lower face is visible.
         description_parts.append("clean-shaven")
 
     # Facial marks

@@ -21,6 +21,8 @@ class FaceObserved(BaseModel):
     gender: Optional[str] = None
     facial_hair: Optional[str] = None
     facial_hair_density: Optional[str] = None
+    beard_style: Optional[str] = None
+    mustache_style: Optional[str] = None
     facial_marks: Optional[str] = None
     facial_mark_position: Optional[str] = None
     expression: Optional[str] = None
