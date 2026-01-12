@@ -8,12 +8,22 @@ class FaceObserved(BaseModel):
     face_shape: Optional[str] = None
     hair_color: Optional[str] = None
     hair_type: Optional[str] = None
+    hair_style: Optional[str] = None
     hair_length: Optional[str] = None
+    hairline_type: Optional[str] = None
+    balding_pattern: Optional[str] = None
     eye_color: Optional[str] = None
+    eye_shape: Optional[str] = None
     skin_tone: Optional[str] = None
+    skin_undertone: Optional[str] = None
     age_appearance: Optional[str] = None
+    age_range: Optional[str] = None
     gender: Optional[str] = None
     facial_hair: Optional[str] = None
+    facial_hair_density: Optional[str] = None
+    facial_marks: Optional[str] = None
+    facial_mark_position: Optional[str] = None
+    expression: Optional[str] = None
 
 
 class DressObserved(BaseModel):

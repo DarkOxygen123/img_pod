@@ -5,3 +5,6 @@ __pycache__/
 .env
 config/config.yaml
 *.log
+
+# Generated test outputs
+testing/output/

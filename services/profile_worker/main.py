@@ -55,15 +55,32 @@ def _profile_prompt(payload: dict) -> str:
     accessories = features.get("accessories", {})
     
     # Extract features with defaults
-    gender = observed.get("gender") or "person"
+    gender_raw = (observed.get("gender") or "person").strip()
+    # Normalize gender into prompt-friendly terms.
+    if gender_raw == "male":
+        gender = "man"
+    elif gender_raw == "female":
+        gender = "woman"
+    else:
+        gender = "person"
     age = observed.get("age_appearance") or "adult"
+    age_range = observed.get("age_range")
     skin_tone = observed.get("skin_tone") or "natural"
+    skin_undertone = observed.get("skin_undertone")
     hair_color = observed.get("hair_color") or "dark"
     hair_type = observed.get("hair_type") or "natural"
+    hair_style = observed.get("hair_style")
     hair_length = observed.get("hair_length") or "medium"
+    hairline_type = observed.get("hairline_type")
+    balding_pattern = observed.get("balding_pattern")
     eye_color = observed.get("eye_color") or "brown"
+    eye_shape = observed.get("eye_shape")
     face_shape = observed.get("face_shape") or "oval"
     facial_hair = observed.get("facial_hair")
+    facial_hair_density = observed.get("facial_hair_density")
+    facial_marks = observed.get("facial_marks")
+    facial_mark_position = observed.get("facial_mark_position")
+    expression = observed.get("expression")
     dress_color = dress.get("dress_color") or "casual"
     dress_type = dress.get("dress_type") or "clothing"
     
@@ -82,45 +99,114 @@ def _profile_prompt(payload: dict) -> str:
     description_parts = []
     
     # Core identity
-    description_parts.append(f"A {age} {gender}")
+    # If we have a specific range, include it for more stable identity.
+    if age_range and age_range != "none":
+        description_parts.append(f"A {age_range} {gender}")
+    else:
+        description_parts.append(f"A {age} {gender}")
     
     # Facial features
-    description_parts.append(f"with {skin_tone} skin tone")
+    if skin_undertone and skin_undertone != "none":
+        description_parts.append(f"with {skin_tone} skin tone ({skin_undertone} undertone)")
+    else:
+        description_parts.append(f"with {skin_tone} skin tone")
+
     description_parts.append(f"{hair_color} {hair_type} hair ({hair_length} length)")
-    description_parts.append(f"{eye_color} eyes")
+    if hair_style and hair_style != "none":
+        description_parts.append(f"hairstyle: {hair_style}")
+    if hairline_type and hairline_type != "none":
+        description_parts.append(f"hairline: {hairline_type}")
+    if balding_pattern and balding_pattern not in ("none", "no"):
+        description_parts.append(f"balding: {balding_pattern}")
+
+    if eye_shape and eye_shape != "none":
+        description_parts.append(f"{eye_color} eyes ({eye_shape} shape)")
+    else:
+        description_parts.append(f"{eye_color} eyes")
+
     description_parts.append(f"{face_shape} face shape")
     
-    # Facial hair if present
+    # Facial hair rules
+    if gender == "woman":
+        facial_hair = "none"
+        facial_hair_density = "none"
     if facial_hair and facial_hair != "none":
-        description_parts.append(f"{facial_hair} facial hair")
+        if facial_hair_density and facial_hair_density != "none":
+            description_parts.append(f"with {facial_hair_density} {facial_hair} facial hair")
+        else:
+            description_parts.append(f"with {facial_hair} facial hair")
+    elif gender == "man":
+        description_parts.append("clean-shaven")
+
+    # Facial marks
+    if facial_marks and facial_marks != "none":
+        if facial_mark_position and facial_mark_position != "none":
+            description_parts.append(f"with a visible {facial_marks} on the {facial_mark_position}")
+        else:
+            description_parts.append(f"with a visible {facial_marks} on the face")
+
+    # Expression (helps profile consistency)
+    if expression and expression != "none":
+        description_parts.append(f"expression: {expression}")
     
     # Clothing
     description_parts.append(f"wearing {dress_color} {dress_type}")
     
     # Accessories
     if hat_present and hat_style and hat_style != "none":
-        description_parts.append(f"wearing a {hat_color} {hat_style}")
+        if hat_color and hat_color != "none":
+            description_parts.append(f"wearing a {hat_color} {hat_style}")
+        else:
+            description_parts.append(f"wearing a {hat_style}")
     
     if glasses_present and glasses_type and glasses_type != "none":
-        description_parts.append(f"wearing {glasses_color} {glasses_type}")
+        if glasses_color and glasses_color != "none":
+            description_parts.append(f"wearing {glasses_color} {glasses_type}")
+        else:
+            description_parts.append(f"wearing {glasses_type}")
     
     if mask_present and mask_type and mask_type != "none":
-        description_parts.append(f"wearing a {mask_color} {mask_type}")
+        if mask_color and mask_color != "none":
+            description_parts.append(f"wearing a {mask_color} {mask_type} mask")
+        else:
+            description_parts.append(f"wearing a {mask_type} mask")
     
-    full_description = ", ".join(description_parts)
+    full_description = ", ".join([p for p in description_parts if p])
+
+    # Add more explicit hair guidance.
+    hair_desc = f"{hair_color} {hair_type} hair ({hair_length} length)"
+    if hair_style and hair_style != "none":
+        hair_desc = f"{hair_desc}, hairstyle: {hair_style}"
+    if hairline_type and hairline_type != "none":
+        hair_desc = f"{hair_desc}, hairline: {hairline_type}"
+    if balding_pattern and balding_pattern not in ("none", "no"):
+        hair_desc = f"{hair_desc}, balding: {balding_pattern}"
+
+    negative_bits = [
+        "low quality",
+        "blurry",
+        "bad anatomy",
+        "deformed face",
+        "extra faces",
+        "multiple heads",
+    ]
+    if gender == "woman":
+        negative_bits += ["beard", "mustache", "facial hair"]
+    negative_prompt = ", ".join(negative_bits)
     
     # Build final prompt with emphasis on accuracy
     return (
         f"Professional waist-up portrait: {full_description}. "
         f"CRITICAL REQUIREMENTS: "
-        f"Hair MUST be {hair_type} texture with {hair_color} color and {hair_length} length. "
+        f"Gender must read clearly as a {gender}. "
+        f"Hair MUST match exactly: {hair_desc}. "
         f"Skin tone MUST be {skin_tone}. "
         f"Eyes MUST be {eye_color}. "
         f"Face shape MUST be {face_shape}. "
-        f"Style: 3D Disney Pixar animation, photorealistic details, "
-        f"front-facing centered composition, direct eye contact with camera, "
-        f"upper body visible from waist up, cinematic studio lighting, "
-        f"expressive facial features, professional quality rendering"
+        f"Style: high-quality 3D animation, realistic skin and hair detail, "
+        f"front-facing centered composition, direct eye contact, waist-up framing, "
+        f"cinematic studio lighting, sharp focus, clean background. "
+        f"NEGATIVE: {negative_prompt}"
     )
 
 
@@ -140,7 +226,11 @@ async def generate_from_features(avatar_features: dict = Body(...)) -> JSONRespo
     prompt = _profile_prompt(avatar_features)
     logger.info("profile_prompt_generated", extra={"extra_fields": {"prompt": prompt}})
     
-    out = _pipe(prompt=prompt, height=512, width=512, num_inference_steps=4, guidance_scale=0.0)
+    # Try to pass negative_prompt when supported.
+    try:
+        out = _pipe(prompt=prompt, negative_prompt="beard, mustache, facial hair" if " woman" in prompt else None, height=512, width=512, num_inference_steps=4, guidance_scale=0.0)
+    except TypeError:
+        out = _pipe(prompt=prompt, height=512, width=512, num_inference_steps=4, guidance_scale=0.0)
     image = out.images[0]
     buf = io.BytesIO()
     image.save(buf, format="PNG")
