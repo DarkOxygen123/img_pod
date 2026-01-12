@@ -47,6 +47,17 @@ git pull
 bash deploy_profile.sh
 ```
 
+### 4. LLM Service Pod (cf0pc97a1e9lki) - RTX 4090
+```bash
+# SSH to LLM service pod
+ssh root@82.221.170.242 -p 45164 -i ~/.ssh/id_ed25519
+
+# Deploy (paste these commands)
+cd /workspace/img_pod
+git pull
+bash deploy_llm.sh
+```
+
 ---
 
 ## Quick Health Checks

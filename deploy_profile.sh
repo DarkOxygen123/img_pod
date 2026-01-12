@@ -15,7 +15,7 @@ git pull
 
 echo "[2/5] Installing dependencies..."
 pip install --upgrade pip
-pip install -r shared/requirements.txt
+pip install -r requirements.profile.txt
 
 echo "[3/5] Stopping existing service..."
 ps aux | grep "profile_worker.main:app" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || echo "No existing service found"
