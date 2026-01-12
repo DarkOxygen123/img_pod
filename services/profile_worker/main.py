@@ -43,7 +43,7 @@ async def startup() -> None:
     logger.info("loaded_profile_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
 
 
-def _profile_prompt(payload: dict) -> str:
+def _profile_prompt(payload: dict) -> tuple[str, str]:
     """Build preset prompt from features dict for waist-level profile photo."""
     # Log incoming payload for debugging
     logger.info("prompt_payload_received", extra={"extra_fields": {"payload_keys": list(payload.keys())}})
@@ -202,7 +202,7 @@ def _profile_prompt(payload: dict) -> str:
     negative_prompt = ", ".join(negative_bits)
     
     # Build final prompt with emphasis on accuracy
-    return (
+    prompt = (
         f"Professional waist-up portrait: {full_description}. "
         f"Single subject only: EXACTLY ONE person in the image. "
         f"CRITICAL REQUIREMENTS: "
@@ -215,8 +215,8 @@ def _profile_prompt(payload: dict) -> str:
         f"cartoony/animated look with detailed skin and hair features, "
         f"front-facing centered composition, direct eye contact, waist-up framing, "
         f"cinematic studio lighting, sharp focus, clean background. "
-        f"NEGATIVE: {negative_prompt}"
     )
+    return prompt, negative_prompt
 
 
 @app.get("/healthz")
@@ -233,14 +233,21 @@ async def generate_from_features(avatar_features: dict = Body(...)) -> JSONRespo
 
     # Pass the full dict - prompt function will extract avatar_features
     t_prompt0 = time.time()
-    prompt = _profile_prompt(avatar_features)
+    prompt, negative_prompt = _profile_prompt(avatar_features)
     t_prompt_s = time.time() - t_prompt0
     logger.info("profile_prompt_generated", extra={"extra_fields": {"prompt": prompt}})
     
-    # Try to pass negative_prompt when supported.
+    # Pass negative_prompt when supported (helps prevent extra people/faces).
     t_infer0 = time.time()
     try:
-        out = _pipe(prompt=prompt, negative_prompt="beard, mustache, facial hair" if " woman" in prompt else None, height=512, width=512, num_inference_steps=4, guidance_scale=0.0)
+        out = _pipe(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            height=512,
+            width=512,
+            num_inference_steps=4,
+            guidance_scale=0.0,
+        )
     except TypeError:
         out = _pipe(prompt=prompt, height=512, width=512, num_inference_steps=4, guidance_scale=0.0)
     t_infer_s = time.time() - t_infer0
