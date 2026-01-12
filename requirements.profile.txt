@@ -1,8 +1,9 @@
 -r requirements.interface.txt
 Pillow==10.3.0
 torch>=2.1.0
+torchvision>=0.16.0
 diffusers==0.36.0
-transformers>=4.46.0
+transformers[vision]>=4.46.0
 accelerate==1.12.0
 sentencepiece>=0.1.99
 safetensors==0.7.0
