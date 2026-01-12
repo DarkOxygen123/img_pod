@@ -39,7 +39,7 @@ bash deploy_selfie_feature.sh
 ### 3. Profile Worker Pod (ika5ni96asnpts) - RTX 4090
 ```bash
 # SSH to profile worker pod
-ssh root@103.196.86.90 -p 15610 -i ~/.ssh/id_ed25519
+ssh root@103.196.86.90 -p 13560 -i ~/.ssh/id_ed25519
 
 # Deploy (paste these commands)
 cd /workspace/img_pod

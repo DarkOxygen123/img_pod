@@ -17,7 +17,7 @@
 
 ### 3. Profile Worker (Image Generation)
 - **Pod ID**: ika5ni96asnpts
-- **SSH**: `ssh root@103.196.86.90 -p 15610 -i ~/.ssh/id_ed25519`
+- **SSH**: `ssh root@103.196.86.90 -p 13560 -i ~/.ssh/id_ed25519`
 - **URL**: https://ika5ni96asnpts-8003.proxy.runpod.net
 - **GPU**: RTX 4090 (24GB VRAM)
 - **Models**: Z-Image Turbo (~3GB)
