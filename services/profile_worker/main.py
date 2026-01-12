@@ -189,6 +189,13 @@ def _profile_prompt(payload: dict) -> str:
         "deformed face",
         "extra faces",
         "multiple heads",
+        "two people",
+        "two persons",
+        "multiple people",
+        "group",
+        "crowd",
+        "extra person",
+        "duplicate person",
     ]
     if gender == "woman":
         negative_bits += ["beard", "mustache", "facial hair"]
@@ -197,13 +204,15 @@ def _profile_prompt(payload: dict) -> str:
     # Build final prompt with emphasis on accuracy
     return (
         f"Professional waist-up portrait: {full_description}. "
+        f"Single subject only: EXACTLY ONE person in the image. "
         f"CRITICAL REQUIREMENTS: "
         f"Gender must read clearly as a {gender}. "
         f"Hair MUST match exactly: {hair_desc}. "
         f"Skin tone MUST be {skin_tone}. "
         f"Eyes MUST be {eye_color}. "
         f"Face shape MUST be {face_shape}. "
-        f"Style: high-quality 3D animation, realistic skin and hair detail, "
+        f"Style: high-quality stylized 3D character render (not photorealistic), "
+        f"cartoony/animated look with detailed skin and hair features, "
         f"front-facing centered composition, direct eye contact, waist-up framing, "
         f"cinematic studio lighting, sharp focus, clean background. "
         f"NEGATIVE: {negative_prompt}"
@@ -223,19 +232,36 @@ async def generate_from_features(avatar_features: dict = Body(...)) -> JSONRespo
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     # Pass the full dict - prompt function will extract avatar_features
+    t_prompt0 = time.time()
     prompt = _profile_prompt(avatar_features)
+    t_prompt_s = time.time() - t_prompt0
     logger.info("profile_prompt_generated", extra={"extra_fields": {"prompt": prompt}})
     
     # Try to pass negative_prompt when supported.
+    t_infer0 = time.time()
     try:
         out = _pipe(prompt=prompt, negative_prompt="beard, mustache, facial hair" if " woman" in prompt else None, height=512, width=512, num_inference_steps=4, guidance_scale=0.0)
     except TypeError:
         out = _pipe(prompt=prompt, height=512, width=512, num_inference_steps=4, guidance_scale=0.0)
+    t_infer_s = time.time() - t_infer0
     image = out.images[0]
+    t_encode0 = time.time()
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     image_bytes = buf.getvalue()
+    t_encode_s = time.time() - t_encode0
     
     t_elapsed = time.time() - t_start
-    logger.info("image_generation_complete", extra={"extra_fields": {"seconds": round(t_elapsed, 2), "image_size": len(image_bytes)}})
+    logger.info(
+        "image_generation_complete",
+        extra={
+            "extra_fields": {
+                "seconds": round(t_elapsed, 2),
+                "prompt_seconds": round(t_prompt_s, 3),
+                "infer_seconds": round(t_infer_s, 3),
+                "encode_seconds": round(t_encode_s, 3),
+                "image_size": len(image_bytes),
+            }
+        },
+    )
     return JSONResponse({"image_bytes_b64": base64.b64encode(image_bytes).decode()})

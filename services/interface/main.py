@@ -206,6 +206,7 @@ async def enqueue_or_429(queue: BoundedQueue, payload: dict, sla_ms: int, worker
 
 @app.post("/v1/profile/create")
 async def profile_create(file: UploadFile = File(...)) -> Response:
+    t0 = asyncio.get_event_loop().time()
     logger.info("profile_create_start", extra={"extra_fields": {"filename": file.filename, "content_type": file.content_type}})
     
     # Read input selfie
@@ -227,7 +228,10 @@ async def profile_create(file: UploadFile = File(...)) -> Response:
         result: dict = await asyncio.wait_for(future, timeout=interface_settings.profile_sla_ms / 1000)
         logger.info("profile_create_analyze_complete", extra={"extra_fields": {"has_features": "avatar_features" in result}})
     except asyncio.TimeoutError:
-        logger.error("profile_create_analyze_timeout")
+        logger.error(
+            "profile_create_analyze_timeout",
+            extra={"extra_fields": {"seconds": round(asyncio.get_event_loop().time() - t0, 2)}},
+        )
         raise HTTPException(status_code=504, detail="Profile worker timed out")
     except Exception as e:
         logger.error("profile_create_analyze_error", extra={"extra_fields": {"error": str(e)}})
@@ -248,7 +252,10 @@ async def profile_create(file: UploadFile = File(...)) -> Response:
         image_bytes: bytes = await asyncio.wait_for(gen_future, timeout=interface_settings.profile_sla_ms / 1000)
         logger.info("profile_create_generate_complete", extra={"extra_fields": {"image_size": len(image_bytes)}})
     except asyncio.TimeoutError:
-        logger.error("profile_create_generate_timeout")
+        logger.error(
+            "profile_create_generate_timeout",
+            extra={"extra_fields": {"seconds": round(asyncio.get_event_loop().time() - t0, 2)}},
+        )
         raise HTTPException(status_code=504, detail="Profile generate timed out")
     except Exception as e:
         logger.error("profile_create_generate_error", extra={"extra_fields": {"error": str(e)}})
@@ -267,7 +274,15 @@ async def profile_create(file: UploadFile = File(...)) -> Response:
     )
     parts.append(f"--{boundary}--\r\n".encode())
     body = b"".join(parts)
-    logger.info("profile_create_success", extra={"extra_fields": {"response_size": len(body)}})
+    logger.info(
+        "profile_create_success",
+        extra={
+            "extra_fields": {
+                "response_size": len(body),
+                "seconds": round(asyncio.get_event_loop().time() - t0, 2),
+            }
+        },
+    )
     return Response(content=body, media_type=f"multipart/mixed; boundary={boundary}")
 
 @app.get("/healthz")
