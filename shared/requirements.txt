@@ -6,8 +6,8 @@ pydantic-settings>=2.0.0
 pyyaml>=6.0
 httpx>=0.24.0
 pillow>=10.2.0
-torch>=2.1.0
-diffusers>=0.25.0
+torch>=2.5.0
+diffusers>=0.31.0
 transformers>=4.37.0
 accelerate>=0.26.0
 numpy<2.0.0
