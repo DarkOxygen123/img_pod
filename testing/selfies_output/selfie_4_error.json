@@ -1,0 +1,18 @@
+{
+  "detail": {
+    "code": "BAD_SELFIE",
+    "message": "Selfie quality check failed",
+    "details": {
+      "reason": "INSUFFICIENT_FEATURES",
+      "missing_features": [
+        "gender",
+        "age_appearance",
+        "skin_tone",
+        "face_shape"
+      ],
+      "max_missing_allowed": 2,
+      "quality_score": 0.662,
+      "num_faces": 2
+    }
+  }
+}

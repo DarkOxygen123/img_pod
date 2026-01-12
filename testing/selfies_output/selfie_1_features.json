@@ -1,0 +1,45 @@
+{
+  "avatar_features": {
+    "observed": {
+      "face_shape": "oval",
+      "hair_color": "black",
+      "hair_type": "curly",
+      "hair_style": "short-crop",
+      "hair_length": "short",
+      "hairline_type": "straight",
+      "balding_pattern": "none",
+      "eye_color": "brown",
+      "eye_shape": "almond",
+      "skin_tone": "brown",
+      "skin_undertone": "neutral",
+      "age_appearance": "young",
+      "age_range": null,
+      "gender": "female",
+      "facial_hair": "none",
+      "facial_hair_density": "none",
+      "facial_marks": "none",
+      "facial_mark_position": "none",
+      "expression": "smile"
+    },
+    "dress": {
+      "dress_color": null,
+      "dress_type": null
+    },
+    "accessories": {
+      "hat_present": null,
+      "hat_style": "none",
+      "hat_color": "none",
+      "glasses_present": null,
+      "glasses_type": "none",
+      "glasses_color": "none",
+      "mask_present": null,
+      "mask_type": "none",
+      "mask_color": "none"
+    },
+    "meta": {
+      "face_detected": true,
+      "num_faces": 1,
+      "quality_score": 0.971
+    }
+  }
+}
