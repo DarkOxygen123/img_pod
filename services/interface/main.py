@@ -275,8 +275,8 @@ async def health() -> JSONResponse:
     return JSONResponse(
         {
             "status": "ok",
-            "selfie_feature_worker_url": str(interface_settings.selfie_feature_worker_url),
-            "profile_worker_url": str(interface_settings.profile_worker_url),
+            "selfie_feature_worker_urls": [str(u) for u in interface_settings.selfie_feature_worker_urls],
+            "profile_worker_urls": [str(u) for u in interface_settings.profile_worker_urls],
             "text2img_worker_urls": [str(u) for u in interface_settings.text2img_worker_urls],
             "llm_service_url": str(interface_settings.llm_service_url),
         }
