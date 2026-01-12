@@ -580,6 +580,38 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
 
     # Extract facial, dress, and accessory features using VQA (timed internally)
     face_features, dress_features, accessory_features = _extract_facial_features_with_vqa(img_bgr_cropped)
+
+    # Safety gate: if too many key features are missing/uncertain, ask for a better selfie.
+    # This avoids generating low-quality/hallucinated profiles.
+    key_fields = [
+        "gender",
+        "age_appearance",
+        "skin_tone",
+        "hair_color",
+        "hair_length",
+        "eye_color",
+        "face_shape",
+    ]
+    unknown_values = {None, "", "unknown", "uncertain"}
+    missing = [
+        k
+        for k in key_fields
+        if (str(face_features.get(k)).strip().lower() if face_features.get(k) is not None else None) in unknown_values
+    ]
+    max_missing = int(os.getenv("MAX_MISSING_KEY_FEATURES", "2"))
+    if len(missing) > max_missing:
+        error = {
+            "code": "BAD_SELFIE",
+            "message": "Selfie quality check failed",
+            "details": {
+                "reason": "INSUFFICIENT_FEATURES",
+                "missing_features": missing,
+                "max_missing_allowed": max_missing,
+                "quality_score": float(round(quality, 3)),
+                "num_faces": num_faces,
+            },
+        }
+        raise HTTPException(status_code=422, detail=error)
     
     from shared.models import DressObserved, AccessoriesObserved
     features = FaceProfileFeaturesV1(
