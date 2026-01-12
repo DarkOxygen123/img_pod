@@ -583,22 +583,50 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
 
     # Safety gate: if too many key features are missing/uncertain, ask for a better selfie.
     # This avoids generating low-quality/hallucinated profiles.
-    key_fields = [
-        "gender",
-        "age_appearance",
-        "skin_tone",
-        "hair_color",
-        "hair_length",
-        "eye_color",
-        "face_shape",
-    ]
-    unknown_values = {None, "", "unknown", "uncertain"}
-    missing = [
-        k
-        for k in key_fields
-        if (str(face_features.get(k)).strip().lower() if face_features.get(k) is not None else None) in unknown_values
-    ]
-    max_missing = int(os.getenv("MAX_MISSING_KEY_FEATURES", "2"))
+    def _norm(v: object) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        return s or None
+
+    def _is_unknown(v: object) -> bool:
+        return _norm(v) in {None, "unknown", "uncertain"}
+
+    # Occlusion-aware gating: if a mask/hat/sunglasses are present, some facial attributes
+    # may be legitimately hard to infer. Don't reject those cases unnecessarily.
+    hat_present = _norm(accessory_features.get("hat_present")) == "yes"
+    glasses_present = _norm(accessory_features.get("glasses_present")) == "yes"
+    glasses_type = _norm(accessory_features.get("glasses_type"))
+    mask_present = _norm(accessory_features.get("mask_present")) == "yes"
+
+    sunglasses_types = {"sunglasses", "aviators"}
+    sunglasses_present = glasses_present and (glasses_type in sunglasses_types)
+
+    key_fields: List[str] = ["gender", "age_appearance", "skin_tone", "face_shape"]
+
+    # Hair can be partially/fully hidden by hats/caps.
+    if not hat_present:
+        key_fields += ["hair_length", "hair_color"]
+
+    # Eye color may be hidden by sunglasses; with normal glasses it's sometimes still visible.
+    if not sunglasses_present:
+        key_fields += ["eye_color"]
+
+    # Masks often cover jawline/mouth which can confuse face-shape inference.
+    if mask_present and "face_shape" in key_fields:
+        key_fields = [k for k in key_fields if k != "face_shape"]
+
+    # If the model thinks hair is bald, hair color is irrelevant.
+    if _norm(face_features.get("hair_length")) == "bald" and "hair_color" in key_fields:
+        key_fields = [k for k in key_fields if k != "hair_color"]
+
+    missing = [k for k in key_fields if _is_unknown(face_features.get(k))]
+
+    base_max_missing = int(os.getenv("MAX_MISSING_KEY_FEATURES", "2"))
+    # Slightly relax threshold when occlusions exist (even after removing fields)
+    # because remaining fields can still become noisier.
+    max_missing = base_max_missing + (1 if mask_present else 0) + (1 if glasses_present else 0)
+
     if len(missing) > max_missing:
         error = {
             "code": "BAD_SELFIE",
@@ -607,6 +635,14 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
                 "reason": "INSUFFICIENT_FEATURES",
                 "missing_features": missing,
                 "max_missing_allowed": max_missing,
+                "required_features": key_fields,
+                "occlusions": {
+                    "hat_present": hat_present,
+                    "glasses_present": glasses_present,
+                    "glasses_type": glasses_type,
+                    "sunglasses_present": sunglasses_present,
+                    "mask_present": mask_present,
+                },
                 "quality_score": float(round(quality, 3)),
                 "num_faces": num_faces,
             },

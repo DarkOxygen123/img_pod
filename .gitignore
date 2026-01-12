@@ -8,3 +8,7 @@ config/config.yaml
 
 # Generated test outputs
 testing/output/
+
+# Batch tester artifacts
+testing/selfies/
+testing/selfies_output/

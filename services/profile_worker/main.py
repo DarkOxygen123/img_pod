@@ -200,17 +200,32 @@ def _profile_prompt(payload: dict) -> tuple[str, str]:
     if gender == "woman":
         negative_bits += ["beard", "mustache", "facial hair"]
     negative_prompt = ", ".join(negative_bits)
+
+    sunglasses_types = {"sunglasses", "aviators"}
+    sunglasses_present = bool(glasses_present and glasses_type in sunglasses_types)
+
+    # Occlusion-aware "must match" rules: avoid hallucinating hidden attributes.
+    must_bits = []
+    must_bits.append(f"Gender must read clearly as a {gender}.")
+    must_bits.append(f"Skin tone MUST be {skin_tone}.")
+    if not hat_present:
+        must_bits.append(f"Hair MUST match exactly: {hair_desc}.")
+    else:
+        must_bits.append("Hat is present; hair may be partially hidden. Do not invent extra hair details.")
+    if not sunglasses_present:
+        must_bits.append(f"Eyes MUST be {eye_color}.")
+    else:
+        must_bits.append("Sunglasses are present; do not invent eye color.")
+    if not mask_present:
+        must_bits.append(f"Face shape MUST be {face_shape}.")
+    else:
+        must_bits.append("Mask is present; do not invent detailed jawline/face-shape features hidden by the mask.")
     
     # Build final prompt with emphasis on accuracy
     prompt = (
         f"Professional waist-up portrait: {full_description}. "
         f"Single subject only: EXACTLY ONE person in the image. "
-        f"CRITICAL REQUIREMENTS: "
-        f"Gender must read clearly as a {gender}. "
-        f"Hair MUST match exactly: {hair_desc}. "
-        f"Skin tone MUST be {skin_tone}. "
-        f"Eyes MUST be {eye_color}. "
-        f"Face shape MUST be {face_shape}. "
+        f"CRITICAL REQUIREMENTS: {' '.join(must_bits)} "
         f"Style: high-quality stylized 3D cartoon character render (NOT photorealistic), "
         f"toon shading, smooth clean materials, simplified geometry but high detail, "
         f"animated/avatar look, "
