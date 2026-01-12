@@ -20,9 +20,9 @@ echo "[2/6] Installing dependencies..."
 pip install --upgrade pip
 pip install -r services/selfie_feature_worker/requirements.txt
 
-# Download YOLOv8-Face model (if not exists)
-echo "[3/6] Downloading YOLOv8-Face model..."
-python -c "from ultralytics import YOLO; YOLO('yolov8n-face.pt')" || echo "YOLOv8-Face download initiated"
+# Download YOLOv8 model (if not exists)
+echo "[3/6] Downloading YOLOv8 model..."
+python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" || echo "YOLOv8 download initiated"
 
 # Kill existing service
 echo "[4/6] Stopping existing service..."

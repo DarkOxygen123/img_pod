@@ -300,13 +300,13 @@ async def startup() -> None:
     global _vqa_model, _vqa_processor, _face_detector
     t0 = time.time()
     
-    # Load YOLOv8-Face for robust face detection
+    # Load YOLOv8 for robust face detection
     try:
-        logger.info("loading_yolov8_face")
-        _face_detector = YOLO('yolov8n-face.pt')  # Lightweight face detection
-        logger.info("loaded_yolov8_face", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
+        logger.info("loading_yolov8")
+        _face_detector = YOLO('yolov8n.pt')  # Standard YOLOv8 nano model
+        logger.info("loaded_yolov8", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
     except Exception as e:
-        logger.warning("yolov8_face_load_failed_will_use_opencv_fallback", extra={"extra_fields": {"error": str(e)}})
+        logger.warning("yolov8_load_failed_will_use_opencv_fallback", extra={"extra_fields": {"error": str(e)}})
         _face_detector = None
     
     # Load Qwen2-VL-7B for VQA
