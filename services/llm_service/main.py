@@ -27,6 +27,12 @@ _tokenizer = None
 _model = None
 
 
+@app.get("/healthz")
+async def healthz() -> Dict[str, str]:
+    loaded = _tokenizer is not None and _model is not None
+    return {"status": "ok" if loaded else "loading", "service": "llm_service"}
+
+
 def _torch_dtype():
     if DTYPE.lower() in {"bf16", "bfloat16"}:
         return torch.bfloat16
