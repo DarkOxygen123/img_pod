@@ -15,6 +15,11 @@ git pull
 
 echo "[2/5] Installing dependencies..."
 pip install --upgrade pip
+
+# The LLM service is text-only. If torchvision is present but incompatible with torch
+# (common on some RunPod images), transformers can crash during import.
+pip uninstall -y torchvision >/dev/null 2>&1 || true
+
 pip install --upgrade --force-reinstall \
     "transformers==4.57.3" \
     "tokenizers>=0.22.0" \
