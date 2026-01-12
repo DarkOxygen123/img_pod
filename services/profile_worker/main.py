@@ -196,6 +196,11 @@ def _profile_prompt(payload: dict) -> tuple[str, str]:
         "crowd",
         "extra person",
         "duplicate person",
+        "photorealistic",
+        "realistic photo",
+        "camera",
+        "dslr",
+        "film grain",
     ]
     if gender == "woman":
         negative_bits += ["beard", "mustache", "facial hair"]
@@ -211,10 +216,11 @@ def _profile_prompt(payload: dict) -> tuple[str, str]:
         f"Skin tone MUST be {skin_tone}. "
         f"Eyes MUST be {eye_color}. "
         f"Face shape MUST be {face_shape}. "
-        f"Style: high-quality stylized 3D character render (not photorealistic), "
-        f"cartoony/animated look with detailed skin and hair features, "
+        f"Style: high-quality stylized 3D cartoon character render (NOT photorealistic), "
+        f"toon shading, smooth clean materials, simplified geometry but high detail, "
+        f"animated/avatar look, "
         f"front-facing centered composition, direct eye contact, waist-up framing, "
-        f"cinematic studio lighting, sharp focus, clean background. "
+        f"soft studio lighting, sharp focus, clean plain background. "
     )
     return prompt, negative_prompt
 
