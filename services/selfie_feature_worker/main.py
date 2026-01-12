@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Tuple
+from typing import Tuple, Optional, List
 
 import cv2
 import numpy as np
@@ -10,9 +10,10 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
+from ultralytics import YOLO
 
 from shared.logging_config import get_logger
-from shared.models import FaceMeta, FaceObserved, FaceProfileFeaturesV1
+from shared.models import FaceMeta, FaceObserved, DressObserved, AccessoriesObserved, FaceProfileFeaturesV1
 from shared.settings import config
 
 app = FastAPI()
@@ -20,10 +21,11 @@ logger = get_logger(__name__)
 settings = config.profile_worker_settings()
 
 DEVICE = os.getenv("DEVICE", "cuda")
-VQA_MODEL_ID = "Qwen/Qwen2-VL-2B-Instruct"
+VQA_MODEL_ID = "Qwen/Qwen2-VL-7B-Instruct"  # Upgraded to 7B model
 
 _vqa_model = None
 _vqa_processor = None
+_face_detector = None
 
 
 def _load_image_bytes(content: bytes) -> Tuple[np.ndarray, int, int]:
@@ -150,6 +152,33 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     return face_features, dress_features, accessory_features
 
 
+def _detect_faces_yolo(img_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
+    """Detect faces using YOLOv8-Face for robust detection."""
+    global _face_detector
+    if _face_detector is None:
+        return []
+    
+    results = _face_detector(img_bgr, verbose=False)
+    faces = []
+    
+    for result in results:
+        boxes = result.boxes
+        if boxes is not None:
+            for box in boxes:
+                x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+                faces.append((x1, y1, x2 - x1, y2 - y1))  # Convert to (x, y, w, h) format
+    
+    return faces
+
+
+def _detect_faces_opencv_fallback(img_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
+    """Fallback face detection using OpenCV."""
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+    return [tuple(f) for f in faces]
+
+
 def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
     t_total = time.time()
     if not content or len(content) < 1024:
@@ -180,48 +209,73 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         h, w = new_h, new_w
         logger.info("image_resized", extra={"extra_fields": {"original_size": f"{w}x{h}", "new_size": f"{new_w}x{new_h}"}})
 
-    # Simple face detection with cv2
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+    # Try YOLOv8-Face first, fallback to OpenCV
+    faces = _detect_faces_yolo(img_bgr)
+    if not faces:
+        logger.info("yolo_no_faces_trying_opencv")
+        faces = _detect_faces_opencv_fallback(img_bgr)
     
     num_faces = len(faces)
-    if num_faces != 1:
-        error = {
-            "code": "BAD_SELFIE",
-            "message": "Selfie quality check failed",
-            "details": {"reason": "MULTIPLE_FACES" if num_faces > 1 else "NO_FACE_DETECTED", "quality_score": 0.0, "num_faces": num_faces},
-        }
-        raise HTTPException(status_code=422, detail=error)
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     
-    # Crop to face region with padding for better VQA framing
-    (x, y, fw, fh) = faces[0]
-    padding_factor = 1.5  # 50% padding around face
-    pad_w = int(fw * (padding_factor - 1) / 2)
-    pad_h = int(fh * (padding_factor - 1) / 2)
+    # Robust handling of edge cases
+    if num_faces == 0:
+        # NO FACE DETECTED - use full image with lower quality score
+        logger.warning("no_face_detected_using_full_image")
+        img_bgr_cropped = img_bgr
+        quality_penalty = 0.3  # Lower quality score for no-face images
+    elif num_faces == 1:
+        # SINGLE FACE - ideal case, crop with padding
+        (x, y, fw, fh) = faces[0]
+        padding_factor = 1.5  # 50% padding around face
+        pad_w = int(fw * (padding_factor - 1) / 2)
+        pad_h = int(fh * (padding_factor - 1) / 2)
+        
+        x1 = max(0, x - pad_w)
+        y1 = max(0, y - pad_h)
+        x2 = min(w, x + fw + pad_w)
+        y2 = min(h, y + fh + pad_h)
+        
+        img_bgr_cropped = img_bgr[y1:y2, x1:x2]
+        logger.info("face_cropped", extra={"extra_fields": {"original": f"{w}x{h}", "cropped": f"{x2-x1}x{y2-y1}"}})
+        quality_penalty = 1.0  # No penalty for single face
+    else:
+        # MULTIPLE FACES - pick largest face and warn
+        logger.warning("multiple_faces_picking_largest", extra={"extra_fields": {"num_faces": num_faces}})
+        largest_face = max(faces, key=lambda f: f[2] * f[3])  # Largest area
+        (x, y, fw, fh) = largest_face
+        padding_factor = 1.5
+        pad_w = int(fw * (padding_factor - 1) / 2)
+        pad_h = int(fh * (padding_factor - 1) / 2)
+        
+        x1 = max(0, x - pad_w)
+        y1 = max(0, y - pad_h)
+        x2 = min(w, x + fw + pad_w)
+        y2 = min(h, y + fh + pad_h)
+        
+        img_bgr_cropped = img_bgr[y1:y2, x1:x2]
+        quality_penalty = 0.7  # Penalty for multiple faces
     
-    x1 = max(0, x - pad_w)
-    y1 = max(0, y - pad_h)
-    x2 = min(w, x + fw + pad_w)
-    y2 = min(h, y + fh + pad_h)
+    # Quality check on cropped/full image
+    if num_faces > 0:
+        gray_region = gray[y1:y2, x1:x2]
+    else:
+        gray_region = gray
     
-    img_bgr_cropped = img_bgr[y1:y2, x1:x2]
-    logger.info("face_cropped", extra={"extra_fields": {"original": f"{w}x{h}", "cropped": f"{x2-x1}x{y2-y1}"}})
-    
-    # Quality check on cropped face
-    gray_cropped = gray[y1:y2, x1:x2]
-    blur = _blur_score(gray_cropped)
-    bright = _brightness(gray_cropped)
+    blur = _blur_score(gray_region)
+    bright = _brightness(gray_region)
     
     quality = 0.0
     quality += min(1.0, blur / 150.0) * 0.6
     quality += (1.0 - min(1.0, abs(bright - 128.0) / 128.0)) * 0.4
+    quality *= quality_penalty  # Apply face detection penalty
     
-    if quality < 0.35:
+    # Only reject if REALLY bad quality
+    if quality < 0.2:
         error = {
             "code": "BAD_SELFIE",
             "message": "Selfie quality check failed",
-            "details": {"reason": "LOW_QUALITY", "quality_score": quality, "num_faces": 1},
+            "details": {"reason": "VERY_LOW_QUALITY", "quality_score": quality, "num_faces": num_faces},
         }
         raise HTTPException(status_code=422, detail=error)
 
@@ -233,7 +287,7 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         observed=FaceObserved(**face_features),
         dress=DressObserved(**dress_features),
         accessories=AccessoriesObserved(**accessory_features),
-        meta=FaceMeta(face_detected=True, num_faces=1, quality_score=float(round(quality, 3))),
+        meta=FaceMeta(face_detected=(num_faces > 0), num_faces=num_faces, quality_score=float(round(quality, 3))),
     )
     
     t_elapsed = time.time() - t_total
@@ -243,18 +297,29 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
 
 @app.on_event("startup")
 async def startup() -> None:
-    global _vqa_model, _vqa_processor
+    global _vqa_model, _vqa_processor, _face_detector
     t0 = time.time()
     
-    # Load Qwen2-VL for VQA
+    # Load YOLOv8-Face for robust face detection
+    try:
+        logger.info("loading_yolov8_face")
+        _face_detector = YOLO('yolov8n-face.pt')  # Lightweight face detection
+        logger.info("loaded_yolov8_face", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
+    except Exception as e:
+        logger.warning("yolov8_face_load_failed_will_use_opencv_fallback", extra={"extra_fields": {"error": str(e)}})
+        _face_detector = None
+    
+    # Load Qwen2-VL-7B for VQA
     logger.info("loading_vqa_model", extra={"extra_fields": {"model_id": VQA_MODEL_ID}})
+    t_vqa = time.time()
     _vqa_model = Qwen2VLForConditionalGeneration.from_pretrained(
         VQA_MODEL_ID,
         torch_dtype=torch.bfloat16,
         device_map="auto"
     )
     _vqa_processor = AutoProcessor.from_pretrained(VQA_MODEL_ID)
-    logger.info("loaded_vqa_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
+    logger.info("loaded_vqa_model", extra={"extra_fields": {"seconds": round(time.time() - t_vqa, 2)}})
+    logger.info("startup_complete", extra={"extra_fields": {"total_seconds": round(time.time() - t0, 2)}})
 
 
 @app.get("/healthz")

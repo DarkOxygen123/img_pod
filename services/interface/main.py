@@ -36,12 +36,36 @@ class QueueItem:
 profile_queue = BoundedQueue(capacity=interface_settings.profile_queue_max)
 profile_generate_queue = BoundedQueue(capacity=interface_settings.profile_queue_max)
 text2img_queue = BoundedQueue(capacity=interface_settings.text2img_queue_max)
-worker_index = 0
+selfie_worker_index = 0
+profile_worker_index = 0
+text2img_worker_index = 0
+
+
+def pick_selfie_feature_worker() -> str:
+    """Round-robin load balancing for selfie feature workers."""
+    global selfie_worker_index
+    urls = interface_settings.selfie_feature_worker_urls
+    if not urls:
+        raise HTTPException(status_code=500, detail="No selfie feature workers configured")
+    url = urls[selfie_worker_index % len(urls)]
+    selfie_worker_index = (selfie_worker_index + 1) % len(urls)
+    return str(url)
+
+
+def pick_profile_worker() -> str:
+    """Round-robin load balancing for profile workers."""
+    global profile_worker_index
+    urls = interface_settings.profile_worker_urls
+    if not urls:
+        raise HTTPException(status_code=500, detail="No profile workers configured")
+    url = urls[profile_worker_index % len(urls)]
+    profile_worker_index = (profile_worker_index + 1) % len(urls)
+    return str(url)
 
 
 async def call_profile_worker(payload: dict) -> dict:
     # Step 1: analyze selfie to extract features (dedicated VQA service)
-    analyze_url = str(interface_settings.selfie_feature_worker_url).rstrip("/") + "/v1/profile/analyze"
+    analyze_url = pick_selfie_feature_worker().rstrip("/") + "/v1/profile/analyze"
     resp = await post_multipart_file(
         analyze_url,
         field_name="selfie",
@@ -59,7 +83,7 @@ async def call_profile_worker(payload: dict) -> dict:
 
 async def call_profile_generate(avatar_features: dict) -> bytes:
     """Generate profile image from features via profile GPU."""
-    generate_url = str(interface_settings.profile_worker_url).rstrip("/") + "/v1/profile/generate"
+    generate_url = pick_profile_worker().rstrip("/") + "/v1/profile/generate"
     resp = await post_json(
         generate_url,
         {"avatar_features": avatar_features},
@@ -72,12 +96,12 @@ async def call_profile_generate(avatar_features: dict) -> bytes:
 
 
 def pick_text2img_worker() -> str:
-    global worker_index
+    global text2img_worker_index
     urls = interface_settings.text2img_worker_urls
     if not urls:
         raise HTTPException(status_code=500, detail="No text2img workers configured")
-    url = urls[worker_index % len(urls)]
-    worker_index = (worker_index + 1) % len(urls)
+    url = urls[text2img_worker_index % len(urls)]
+    text2img_worker_index = (text2img_worker_index + 1) % len(urls)
     return str(url)
 
 

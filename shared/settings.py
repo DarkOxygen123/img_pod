@@ -17,9 +17,9 @@ class InterfaceSettings(BaseSettings):
     regen_attempts: int = 2
     profile_sla_ms: int = 90_000
     text2img_sla_ms: int = 8_000
-    llm_service_url: HttpUrl = "https://z8xu5cpyevi44q-8002.proxy.runpod.net"
-    selfie_feature_worker_url: HttpUrl = "https://aknn9iryuo4tr1-8003.proxy.runpod.net"
-    profile_worker_url: HttpUrl = "https://je5fxki9i9cekh-8003.proxy.runpod.net"
+    llm_service_url: HttpUrl = "https://cf0pc97a1e9lki-8002.proxy.runpod.net"
+    selfie_feature_worker_urls: List[HttpUrl] = ["https://wp6is8takig1z0-8003.proxy.runpod.net"]
+    profile_worker_urls: List[HttpUrl] = ["https://ika5ni96asnpts-8003.proxy.runpod.net"]
     text2img_worker_urls: List[HttpUrl] = ["https://tx5t471v3aljjd-8004.proxy.runpod.net"]
 
     model_config = SettingsConfigDict(env_prefix="INTERFACE_", extra="ignore")
