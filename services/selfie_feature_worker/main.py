@@ -1,6 +1,7 @@
 import os
 import time
 from typing import Tuple, Optional, List
+import json
 
 import cv2
 import numpy as np
@@ -97,82 +98,94 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         except Exception as e:
             logger.warning("vqa_feature_failed", extra={"extra_fields": {"error": str(e), "question": question}})
             return None
+
+    def _extract_json_from_text(text: str) -> Optional[dict]:
+        if not text:
+            return None
+        s = text.strip()
+        # Heuristic: grab the outermost JSON object.
+        i = s.find("{")
+        j = s.rfind("}")
+        if i == -1 or j == -1 or j <= i:
+            return None
+        candidate = s[i : j + 1]
+        try:
+            return json.loads(candidate)
+        except Exception:
+            return None
+
+    def _batch_vqa(schema: dict) -> dict:
+        """Ask for all fields in one VQA call, returning a validated features dict."""
+        # Build a compact instruction prompt.
+        lines = [
+            "Return ONLY a JSON object.",
+            "Rules:",
+            "- Keys must exactly match the requested keys.",
+            "- Values must be one of the allowed options for that key, or null.",
+            "- Do not add extra keys.",
+            "- No explanation text.",
+            "Keys and allowed options:",
+        ]
+        for k, opts in schema.items():
+            lines.append(f"- {k}: {', '.join(opts)}")
+        instruction = "\n".join(lines)
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": pil_img},
+                    {"type": "text", "text": instruction},
+                ],
+            }
+        ]
+
+        text = _vqa_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        image_inputs, video_inputs = process_vision_info(messages)
+        inputs = _vqa_processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        ).to(DEVICE)
+
+        with torch.no_grad():
+            # Single generation for all fields.
+            output_ids = _vqa_model.generate(**inputs, max_new_tokens=256)
+
+        generated_ids = output_ids[0][len(inputs.input_ids[0]) :]
+        raw = _vqa_processor.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        parsed = _extract_json_from_text(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("batch_vqa_parse_failed")
+
+        validated: dict = {}
+        for k, opts in schema.items():
+            v = parsed.get(k)
+            if v is None:
+                validated[k] = None
+                continue
+            if isinstance(v, str):
+                vv = v.strip().lower()
+                validated[k] = vv if vv in opts else None
+            else:
+                validated[k] = None
+        return validated
     
-    # Questions and valid options.
-    # Notes:
-    # - Keep answers discrete to reduce parsing errors.
-    # - Skip dependent questions to reduce runtime (hat/glasses/mask details only when present, etc.).
-    # - Preserve existing keys while incorporating recommended ones.
-    features: dict = {}
-
-    # --- Core identity ---
-    features["gender"] = _ask(
-        "What is the person's gender presentation? Choose only one: male, female, uncertain",
-        ["male", "female", "uncertain"],
-    )
-    features["age_range"] = _ask(
-        "What age range does this person appear to be in? Choose only one: under-25, 25-34, 35-44, 45-54, 55+",
-        ["under-25", "25-34", "35-44", "45-54", "55+"],
-    )
-
-    # Keep legacy field (used by some downstream prompt logic); derive when possible.
-    age_map = {
-        "under-25": "young",
-        "25-34": "adult",
-        "35-44": "adult",
-        "45-54": "middle-aged",
-        "55+": "senior",
-    }
-    if features.get("age_range") in age_map:
-        features["age_appearance"] = age_map[features["age_range"]]
-    else:
-        features["age_appearance"] = _ask(
-            "What age group? Choose only one: young, adult, middle-aged, senior",
-            ["young", "adult", "middle-aged", "senior"],
-        )
-
-    # --- Skin ---
-    features["skin_tone"] = _ask(
-        "What is the skin tone? Choose only one: fair, light-brown, medium-brown, dark-brown, black",
-        ["fair", "light-brown", "medium-brown", "dark-brown", "black"],
-    )
-    features["skin_undertone"] = _ask(
-        "What is the skin undertone? Choose only one: cool, neutral, warm, olive",
-        ["cool", "neutral", "warm", "olive"],
-    )
-
-    # --- Eyes ---
-    features["eye_color"] = _ask(
-        "What is the eye color? Choose only one: brown, dark-brown, hazel, green, blue, gray",
-        ["brown", "dark-brown", "hazel", "green", "blue", "gray"],
-    )
-    features["eye_shape"] = _ask(
-        "What is the eye shape? Choose only one: almond, round, hooded, monolid, upturned, downturned",
-        ["almond", "round", "hooded", "monolid", "upturned", "downturned"],
-    )
-
-    # --- Face structure ---
-    features["face_shape"] = _ask(
-        "What is the face shape? Choose only one: oval, round, square, heart, diamond",
-        ["oval", "round", "square", "heart", "diamond"],
-    )
-
-    # --- Hair ---
-    features["hair_color"] = _ask(
-        "What is the hair color? Choose only one: black, dark-brown, brown, light-brown, blonde, red, gray, white",
-        ["black", "dark-brown", "brown", "light-brown", "blonde", "red", "gray", "white"],
-    )
-    features["hair_type"] = _ask(
-        "What is the hair texture? Choose only one: straight, wavy, curly, coily",
-        ["straight", "wavy", "curly", "coily"],
-    )
-    features["hair_length"] = _ask(
-        "What is the hair length? Choose only one: bald, very-short, short, medium, long",
-        ["bald", "very-short", "short", "medium", "long"],
-    )
-    features["hair_style"] = _ask(
-        "What is the hairstyle? Choose only one: side-part, middle-part, slicked-back, undercut, fade, quiff, pompadour, short-crop, buzz-cut, curly-open, long-open, bun, top-knot, ponytail, braid",
-        [
+    # Prefer a single batched VQA call to avoid proxy/interface timeouts.
+    schema = {
+        "gender": ["male", "female", "uncertain"],
+        "age_range": ["under-25", "25-34", "35-44", "45-54", "55+"],
+        "skin_tone": ["fair", "light-brown", "medium-brown", "dark-brown", "black"],
+        "skin_undertone": ["cool", "neutral", "warm", "olive"],
+        "eye_color": ["brown", "dark-brown", "hazel", "green", "blue", "gray"],
+        "eye_shape": ["almond", "round", "hooded", "monolid", "upturned", "downturned"],
+        "face_shape": ["oval", "round", "square", "heart", "diamond"],
+        "hair_color": ["black", "dark-brown", "brown", "light-brown", "blonde", "red", "gray", "white"],
+        "hair_type": ["straight", "wavy", "curly", "coily"],
+        "hair_length": ["bald", "very-short", "short", "medium", "long"],
+        "hair_style": [
             "side-part",
             "middle-part",
             "slicked-back",
@@ -189,20 +202,9 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             "ponytail",
             "braid",
         ],
-    )
-    features["hairline_type"] = _ask(
-        "What is the hairline type? Choose only one: straight, rounded, widow-peak, receding-mild, receding-deep",
-        ["straight", "rounded", "widow-peak", "receding-mild", "receding-deep"],
-    )
-    features["balding_pattern"] = _ask(
-        "If balding is visible, what pattern best fits? Choose only one: none, temples, crown, front-top, full-top, horseshoe",
-        ["none", "temples", "crown", "front-top", "full-top", "horseshoe"],
-    )
-
-    # --- Facial hair ---
-    features["facial_hair"] = _ask(
-        "What facial hair is visible? Choose only one: none, stubble, mustache, chevron-mustache, handlebar-mustache, goatee, short-boxed-beard, full-beard, long-beard",
-        [
+        "hairline_type": ["straight", "rounded", "widow-peak", "receding-mild", "receding-deep"],
+        "balding_pattern": ["none", "temples", "crown", "front-top", "full-top", "horseshoe"],
+        "facial_hair": [
             "none",
             "stubble",
             "mustache",
@@ -213,97 +215,99 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             "full-beard",
             "long-beard",
         ],
-    )
-    gender = (features.get("gender") or "").strip()
-    if gender == "female":
-        # Prevent female prompts from accidentally gaining facial hair.
-        features["facial_hair"] = "none"
-        features["facial_hair_density"] = "none"
-    else:
-        if features.get("facial_hair") and features.get("facial_hair") != "none":
-            features["facial_hair_density"] = _ask(
-                "What is the facial hair density? Choose only one: light, medium, dense",
-                ["light", "medium", "dense"],
-            )
-        else:
-            features["facial_hair_density"] = "none"
+        "facial_hair_density": ["none", "light", "medium", "dense"],
+        "facial_marks": ["none", "mole", "freckles", "scar", "acne"],
+        "facial_mark_position": ["none", "forehead", "left-cheek", "right-cheek", "nose", "upper-lip", "chin", "jawline"],
+        "expression": ["neutral", "slight-smile", "smile", "serious"],
+        "dress_color": ["black", "white", "blue", "red", "green", "yellow", "gray", "brown", "pink", "purple"],
+        "dress_type": ["shirt", "t-shirt", "kurta", "saree", "dress", "suit", "jacket", "sweater", "hoodie", "blouse"],
+        "hat_present": ["yes", "no"],
+        "hat_style": ["none", "baseball-cap", "beanie", "fedora", "cowboy-hat", "sun-hat", "beret"],
+        "hat_color": ["none", "black", "white", "blue", "red", "green", "gray", "brown", "tan"],
+        "glasses_present": ["yes", "no"],
+        "glasses_type": ["none", "reading-glasses", "sunglasses", "aviators", "round-glasses", "square-glasses"],
+        "glasses_color": ["none", "black", "brown", "gold", "silver", "clear", "tortoise"],
+        "mask_present": ["yes", "no"],
+        "mask_type": ["none", "surgical", "cloth", "n95", "bandana"],
+        "mask_color": ["none", "white", "blue", "black", "gray", "patterned"],
+    }
 
-    # --- Facial marks ---
-    features["facial_marks"] = _ask(
-        "Are there visible facial marks? Choose only one: none, mole, freckles, scar, acne",
-        ["none", "mole", "freckles", "scar", "acne"],
-    )
-    if features.get("facial_marks") and features.get("facial_marks") != "none":
-        features["facial_mark_position"] = _ask(
-            "If facial marks exist, where are they located? Choose only one: forehead, left-cheek, right-cheek, nose, upper-lip, chin, jawline",
-            ["forehead", "left-cheek", "right-cheek", "nose", "upper-lip", "chin", "jawline"],
+    try:
+        features: dict = _batch_vqa(schema)
+    except Exception as e:
+        # Fallback: ask a minimal set only (best-effort) rather than timing out.
+        logger.warning("batch_vqa_failed_falling_back_minimal", extra={"extra_fields": {"error": str(e)}})
+        features = {}
+        features["gender"] = _ask(
+            "What is the person's gender presentation? Choose only one: male, female, uncertain",
+            ["male", "female", "uncertain"],
         )
-    else:
-        features["facial_mark_position"] = "none"
-
-    # --- Expression ---
-    features["expression"] = _ask(
-        "What is the facial expression? Choose only one: neutral, slight-smile, smile, serious",
-        ["neutral", "slight-smile", "smile", "serious"],
-    )
-
-    # --- Dress ---
-    features["dress_color"] = _ask(
-        "What is the main clothing color? Choose only one: black, white, blue, red, green, yellow, gray, brown, pink, purple",
-        ["black", "white", "blue", "red", "green", "yellow", "gray", "brown", "pink", "purple"],
-    )
-    features["dress_type"] = _ask(
-        "What type of clothing? Choose only one: shirt, t-shirt, kurta, saree, dress, suit, jacket, sweater, hoodie, blouse",
-        ["shirt", "t-shirt", "kurta", "saree", "dress", "suit", "jacket", "sweater", "hoodie", "blouse"],
-    )
-
-    # --- Accessories (ask presence first; ask details only when present) ---
-    features["hat_present"] = _ask("Is the person wearing a cap or hat? Answer: yes or no", ["yes", "no"])
-    if features.get("hat_present") == "yes":
-        features["hat_style"] = _ask(
-            "If wearing a cap/hat, what style? Choose one: baseball-cap, beanie, fedora, cowboy-hat, sun-hat, beret",
-            ["baseball-cap", "beanie", "fedora", "cowboy-hat", "sun-hat", "beret"],
+        features["age_range"] = _ask(
+            "What age range does this person appear to be in? Choose only one: under-25, 25-34, 35-44, 45-54, 55+",
+            ["under-25", "25-34", "35-44", "45-54", "55+"],
         )
-        features["hat_color"] = _ask(
-            "If wearing a cap/hat, what color? Choose one: black, white, blue, red, green, gray, brown, tan",
-            ["black", "white", "blue", "red", "green", "gray", "brown", "tan"],
+        features["skin_tone"] = _ask(
+            "What is the skin tone? Choose only one: fair, light-brown, medium-brown, dark-brown, black",
+            ["fair", "light-brown", "medium-brown", "dark-brown", "black"],
         )
-    else:
-        features["hat_style"] = "none"
-        features["hat_color"] = "none"
-
-    features["glasses_present"] = _ask("Is the person wearing glasses? Answer: yes or no", ["yes", "no"])
-    if features.get("glasses_present") == "yes":
-        features["glasses_type"] = _ask(
-            "If wearing glasses, what type? Choose one: reading-glasses, sunglasses, aviators, round-glasses, square-glasses",
-            ["reading-glasses", "sunglasses", "aviators", "round-glasses", "square-glasses"],
+        features["eye_color"] = _ask(
+            "What is the eye color? Choose only one: brown, dark-brown, hazel, green, blue, gray",
+            ["brown", "dark-brown", "hazel", "green", "blue", "gray"],
         )
-        features["glasses_color"] = _ask(
-            "If wearing glasses, what frame color? Choose one: black, brown, gold, silver, clear, tortoise",
-            ["black", "brown", "gold", "silver", "clear", "tortoise"],
+        features["hair_color"] = _ask(
+            "What is the hair color? Choose only one: black, dark-brown, brown, light-brown, blonde, red, gray, white",
+            ["black", "dark-brown", "brown", "light-brown", "blonde", "red", "gray", "white"],
         )
-    else:
-        features["glasses_type"] = "none"
-        features["glasses_color"] = "none"
-
-    features["mask_present"] = _ask("Is the person wearing a face mask? Answer: yes or no", ["yes", "no"])
-    if features.get("mask_present") == "yes":
-        features["mask_type"] = _ask(
-            "If wearing a mask, what type? Choose one: surgical, cloth, n95, bandana",
-            ["surgical", "cloth", "n95", "bandana"],
+        features["hair_type"] = _ask(
+            "What is the hair texture? Choose only one: straight, wavy, curly, coily",
+            ["straight", "wavy", "curly", "coily"],
         )
-        features["mask_color"] = _ask(
-            "If wearing a mask, what color? Choose one: white, blue, black, gray, patterned",
-            ["white", "blue", "black", "gray", "patterned"],
+        features["hair_length"] = _ask(
+            "What is the hair length? Choose only one: bald, very-short, short, medium, long",
+            ["bald", "very-short", "short", "medium", "long"],
         )
-    else:
-        features["mask_type"] = "none"
-        features["mask_color"] = "none"
+        features["facial_hair"] = _ask(
+            "What facial hair is visible? Choose only one: none, stubble, mustache, goatee, full-beard",
+            ["none", "stubble", "mustache", "goatee", "full-beard"],
+        )
+        features["facial_marks"] = _ask(
+            "Are there visible facial marks? Choose only one: none, mole, freckles, scar",
+            ["none", "mole", "freckles", "scar"],
+        )
+        features["dress_type"] = _ask(
+            "What type of clothing? Choose only one: shirt, t-shirt, kurta, saree, dress, suit",
+            ["shirt", "t-shirt", "kurta", "saree", "dress", "suit"],
+        )
+        features["hat_present"] = _ask("Is the person wearing a cap or hat? Answer: yes or no", ["yes", "no"])
+        features["glasses_present"] = _ask("Is the person wearing glasses? Answer: yes or no", ["yes", "no"])
+        features["mask_present"] = _ask("Is the person wearing a face mask? Answer: yes or no", ["yes", "no"])
     
     t_elapsed = time.time() - t_start
-    logger.info("vqa_extraction_complete", extra={"extra_fields": {"seconds": round(t_elapsed, 2), "num_questions": len(questions_and_options)}})
+    logger.info(
+        "vqa_extraction_complete",
+        extra={"extra_fields": {"seconds": round(t_elapsed, 2), "num_questions": len(features)}},
+    )
+
+    # Keep legacy field (used by some downstream prompt logic); derive when possible.
+    age_map = {
+        "under-25": "young",
+        "25-34": "adult",
+        "35-44": "adult",
+        "45-54": "middle-aged",
+        "55+": "senior",
+    }
+    if features.get("age_range") in age_map:
+        features["age_appearance"] = age_map[features["age_range"]]
 
     # Post-processing cleanup: ensure dependent fields have usable values.
+    gender = (features.get("gender") or "").strip()
+    if gender == "female":
+        features["facial_hair"] = "none"
+        features["facial_hair_density"] = "none"
+
+    if features.get("facial_marks") in (None, "none"):
+        features["facial_mark_position"] = "none"
+
     if features.get("hat_present") != "yes":
         features["hat_style"] = "none"
         features["hat_color"] = "none"
