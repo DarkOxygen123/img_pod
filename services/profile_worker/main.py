@@ -130,7 +130,8 @@ def _profile_prompt(payload: dict) -> tuple[str, str]:
             description_parts.append(f"with {facial_hair_density} {facial_hair} facial hair")
         else:
             description_parts.append(f"with {facial_hair} facial hair")
-    elif gender == "man":
+    elif gender == "man" and facial_hair == "none" and not mask_present:
+        # Only assert clean-shaven when we explicitly detected none and the lower face is visible.
         description_parts.append("clean-shaven")
 
     # Facial marks

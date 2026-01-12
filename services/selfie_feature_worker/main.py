@@ -52,6 +52,121 @@ def _brightness(gray: np.ndarray) -> float:
     return float(np.mean(gray))
 
 
+def _extract_facial_hair_with_vqa(img_bgr: np.ndarray) -> dict:
+    """Specialized (more accurate) facial-hair extraction.
+
+    Runs a small, focused VQA request on a lower-face crop to improve mustache/beard detection.
+    Returns keys: facial_hair, facial_hair_density (values or None).
+    """
+    if _vqa_model is None or _vqa_processor is None:
+        return {"facial_hair": None, "facial_hair_density": None}
+
+    # Use a slightly higher resolution than the generic VQA pass.
+    vqa_max_dim = int(os.getenv("VQA_FACIAL_HAIR_MAX_DIM", "1024"))
+    vqa_bgr = img_bgr
+    h0, w0 = vqa_bgr.shape[:2]
+    if max(h0, w0) > vqa_max_dim and vqa_max_dim >= 256:
+        scale = vqa_max_dim / max(h0, w0)
+        new_w = max(1, int(w0 * scale))
+        new_h = max(1, int(h0 * scale))
+        vqa_bgr = cv2.resize(vqa_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    img_rgb = cv2.cvtColor(vqa_bgr, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(img_rgb)
+
+    def _extract_json_from_text(text: str) -> Optional[dict]:
+        if not text:
+            return None
+        s = text.strip()
+        i = s.find("{")
+        j = s.rfind("}")
+        if i == -1 or j == -1 or j <= i:
+            return None
+        candidate = s[i : j + 1]
+        try:
+            return json.loads(candidate)
+        except Exception:
+            return None
+
+    schema = {
+        "facial_hair": [
+            "none",
+            "stubble",
+            "light-mustache",
+            "mustache",
+            "chevron-mustache",
+            "handlebar-mustache",
+            "goatee",
+            "trimmed-beard",
+            "short-boxed-beard",
+            "full-beard",
+            "long-beard",
+        ],
+        "facial_hair_density": ["none", "light", "medium", "dense"],
+    }
+
+    # Provide short definitions to reduce confusion.
+    instruction = "\n".join(
+        [
+            "Return ONLY a JSON object.",
+            "Focus ONLY on the beard/mustache area (lower face).",
+            "Rules:",
+            "- Keys must exactly match the requested keys.",
+            "- Values must be one of the allowed options for that key, or null.",
+            "- If the lower face is not visible/occluded/too blurry, use null.",
+            "Definitions:",
+            "- none: clean-shaven (no visible facial hair)",
+            "- stubble: very short even beard shadow",
+            "- trimmed-beard: short beard, clearly present but kept close",
+            "- short-boxed-beard: defined beard shape along jaw and chin",
+            "- goatee: hair on chin (often with mustache)",
+            "Keys and allowed options:",
+            f"- facial_hair: {', '.join(schema['facial_hair'])}",
+            f"- facial_hair_density: {', '.join(schema['facial_hair_density'])}",
+        ]
+    )
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": pil_img},
+                {"type": "text", "text": instruction},
+            ],
+        }
+    ]
+
+    text = _vqa_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    image_inputs, video_inputs = process_vision_info(messages)
+    inputs = _vqa_processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    ).to(DEVICE)
+
+    max_new_tokens = int(os.getenv("VQA_FACIAL_HAIR_MAX_NEW_TOKENS", "96"))
+    with torch.inference_mode():
+        output_ids = _vqa_model.generate(**inputs, max_new_tokens=max_new_tokens)
+
+    generated_ids = output_ids[0][len(inputs.input_ids[0]) :]
+    raw = _vqa_processor.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+    parsed = _extract_json_from_text(raw)
+    if not isinstance(parsed, dict):
+        return {"facial_hair": None, "facial_hair_density": None}
+
+    out: dict = {"facial_hair": None, "facial_hair_density": None}
+    for k, opts in schema.items():
+        v = parsed.get(k)
+        if v is None:
+            continue
+        if isinstance(v, str):
+            vv = v.strip().lower()
+            out[k] = vv if vv in opts else None
+    return out
+
+
 def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     """Use Qwen2-VL for visual question answering to extract facial features."""
     t_start = time.time()
@@ -337,6 +452,12 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         features["facial_hair"] = "none"
         features["facial_hair_density"] = "none"
 
+    # If a mask is present, lower-face visibility is often poor. Avoid forcing "none".
+    if features.get("mask_present") == "yes":
+        if features.get("facial_hair") in (None, "none", "stubble", "light-mustache", "mustache"):
+            features["facial_hair"] = None
+            features["facial_hair_density"] = None
+
     if features.get("facial_marks") in (None, "none"):
         features["facial_mark_position"] = "none"
 
@@ -580,6 +701,26 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
 
     # Extract facial, dress, and accessory features using VQA (timed internally)
     face_features, dress_features, accessory_features = _extract_facial_features_with_vqa(img_bgr_cropped)
+
+    # Second-pass: improve facial-hair accuracy by looking only at the lower face area.
+    # Do this only when the selfie is likely to show the lower face.
+    try:
+        gender = str(face_features.get("gender") or "").strip().lower()
+        mask_present = str(accessory_features.get("mask_present") or "").strip().lower() == "yes"
+        if not mask_present and gender in {"male", "uncertain"}:
+            h_c, w_c = img_bgr_cropped.shape[:2]
+            # Lower-face crop: center width, bottom ~65% of the crop.
+            y0 = int(h_c * 0.35)
+            x0 = int(w_c * 0.15)
+            x1 = int(w_c * 0.85)
+            lower = img_bgr_cropped[y0:h_c, x0:x1]
+            fh = _extract_facial_hair_with_vqa(lower)
+            if fh.get("facial_hair") is not None:
+                face_features["facial_hair"] = fh.get("facial_hair")
+            if fh.get("facial_hair_density") is not None:
+                face_features["facial_hair_density"] = fh.get("facial_hair_density")
+    except Exception as e:
+        logger.warning("facial_hair_second_pass_failed", extra={"extra_fields": {"error": str(e)}})
 
     # Safety gate: if too many key features are missing/uncertain, ask for a better selfie.
     # This avoids generating low-quality/hallucinated profiles.
