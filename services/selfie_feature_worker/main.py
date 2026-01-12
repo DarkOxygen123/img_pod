@@ -55,7 +55,22 @@ def _brightness(gray: np.ndarray) -> float:
 def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     """Use Qwen2-VL for visual question answering to extract facial features."""
     t_start = time.time()
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    # VQA is the slowest step; downscale the crop further for speed.
+    # This is separate from the earlier 1024px cap used for face detection.
+    vqa_max_dim = int(os.getenv("VQA_MAX_DIM", "768"))
+    vqa_bgr = img_bgr
+    h0, w0 = vqa_bgr.shape[:2]
+    if max(h0, w0) > vqa_max_dim and vqa_max_dim >= 256:
+        scale = vqa_max_dim / max(h0, w0)
+        new_w = max(1, int(w0 * scale))
+        new_h = max(1, int(h0 * scale))
+        vqa_bgr = cv2.resize(vqa_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        logger.info(
+            "vqa_image_resized",
+            extra={"extra_fields": {"original_size": f"{w0}x{h0}", "new_size": f"{new_w}x{new_h}"}},
+        )
+
+    img_rgb = cv2.cvtColor(vqa_bgr, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(img_rgb)
 
     def _ask(question: str, valid_options: List[str]) -> Optional[str]:
@@ -150,9 +165,9 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             return_tensors="pt",
         ).to(DEVICE)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             # Single generation for all fields.
-            output_ids = _vqa_model.generate(**inputs, max_new_tokens=256)
+            output_ids = _vqa_model.generate(**inputs, max_new_tokens=160)
 
         generated_ids = output_ids[0][len(inputs.input_ids[0]) :]
         raw = _vqa_processor.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
