@@ -64,7 +64,6 @@ def _profile_prompt(payload: dict) -> tuple[str, str]:
     else:
         gender = "person"
     age = observed.get("age_appearance") or "adult"
-    age_range = observed.get("age_range")
     skin_tone = observed.get("skin_tone") or "natural"
     skin_undertone = observed.get("skin_undertone")
     hair_color = observed.get("hair_color") or "dark"
@@ -98,12 +97,8 @@ def _profile_prompt(payload: dict) -> tuple[str, str]:
     # Build template-based description
     description_parts = []
     
-    # Core identity
-    # If we have a specific range, include it for more stable identity.
-    if age_range and age_range != "none":
-        description_parts.append(f"A {age_range} {gender}")
-    else:
-        description_parts.append(f"A {age} {gender}")
+    # Core identity (simple buckets tend to be more reliable than ranges)
+    description_parts.append(f"A {age} {gender}")
     
     # Facial features
     if skin_undertone and skin_undertone != "none":

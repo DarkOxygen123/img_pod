@@ -191,8 +191,10 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     # Prefer a single batched VQA call to avoid proxy/interface timeouts.
     schema = {
         "gender": ["male", "female", "uncertain"],
-        "age_range": ["under-25", "25-34", "35-44", "45-54", "55+"],
-        "skin_tone": ["fair", "light-brown", "medium-brown", "dark-brown", "black"],
+        # Age ranges tended to be noisy; keep to simple buckets for stability.
+        "age_appearance": ["young", "adult", "middle-aged", "senior"],
+        # Expanded skin tone labels (incl. wheatish) for better classification.
+        "skin_tone": ["porcelain", "fair", "wheatish", "light-brown", "brown", "dark-brown", "deep"],
         "skin_undertone": ["cool", "neutral", "warm", "olive"],
         "eye_color": ["brown", "dark-brown", "hazel", "green", "blue", "gray"],
         "eye_shape": ["almond", "round", "hooded", "monolid", "upturned", "downturned"],
@@ -230,10 +232,12 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         "facial_hair": [
             "none",
             "stubble",
+            "light-mustache",
             "mustache",
             "chevron-mustache",
             "handlebar-mustache",
             "goatee",
+            "trimmed-beard",
             "short-boxed-beard",
             "full-beard",
             "long-beard",
@@ -265,13 +269,14 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             "What is the person's gender presentation? Choose only one: male, female, uncertain",
             ["male", "female", "uncertain"],
         )
-        features["age_range"] = _ask(
-            "What age range does this person appear to be in? Choose only one: under-25, 25-34, 35-44, 45-54, 55+",
-            ["under-25", "25-34", "35-44", "45-54", "55+"],
+        features["age_appearance"] = _ask(
+            "What age group? Choose only one: young, adult, middle-aged, senior",
+            ["young", "adult", "middle-aged", "senior"],
         )
+        features["age_range"] = None
         features["skin_tone"] = _ask(
-            "What is the skin tone? Choose only one: fair, light-brown, medium-brown, dark-brown, black",
-            ["fair", "light-brown", "medium-brown", "dark-brown", "black"],
+            "What best describes the visible skin tone color? Choose only one: porcelain, fair, wheatish, light-brown, brown, dark-brown, deep",
+            ["porcelain", "fair", "wheatish", "light-brown", "brown", "dark-brown", "deep"],
         )
         features["eye_color"] = _ask(
             "What is the eye color? Choose only one: brown, dark-brown, hazel, green, blue, gray",
@@ -290,8 +295,8 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             ["bald", "very-short", "short", "medium", "long"],
         )
         features["facial_hair"] = _ask(
-            "What facial hair is visible? Choose only one: none, stubble, mustache, goatee, full-beard",
-            ["none", "stubble", "mustache", "goatee", "full-beard"],
+            "What facial hair is visible? Choose only one: none, stubble, light-mustache, mustache, trimmed-beard, full-beard",
+            ["none", "stubble", "light-mustache", "mustache", "trimmed-beard", "full-beard"],
         )
         features["facial_marks"] = _ask(
             "Are there visible facial marks? Choose only one: none, mole, freckles, scar",
@@ -319,8 +324,12 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         "45-54": "middle-aged",
         "55+": "senior",
     }
-    if features.get("age_range") in age_map:
+    # If any older clients still send age_range, preserve the mapping.
+    if features.get("age_range") in age_map and not features.get("age_appearance"):
         features["age_appearance"] = age_map[features["age_range"]]
+
+    # We no longer ask age_range; keep it explicitly null for consistent output.
+    features["age_range"] = None
 
     # Post-processing cleanup: ensure dependent fields have usable values.
     gender = (features.get("gender") or "").strip()
