@@ -18,7 +18,7 @@ app = FastAPI()
 logger = get_logger(__name__)
 settings = config.llm_settings()
 
-MODEL_ID = os.getenv("LLM_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
+MODEL_ID = os.getenv("LLM_MODEL_ID", "mistralai/Mistral-7B-Instruct-v0.3")
 DTYPE = os.getenv("LLM_TORCH_DTYPE", "bfloat16")
 DEVICE = os.getenv("LLM_DEVICE", "cuda")
 MAX_NEW_TOKENS = int(os.getenv("LLM_MAX_NEW_TOKENS", "512"))
@@ -75,7 +75,12 @@ def _generate(system: str, user: str) -> str:
     if _tokenizer is None or _model is None:
         raise HTTPException(status_code=503, detail="LLM not loaded")
 
-    prompt = f"<|system|>\n{system}\n<|user|>\n{user}\n<|assistant|>\n"
+    # Mistral chat template format
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user}
+    ]
+    prompt = _tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = _tokenizer(prompt, return_tensors="pt")
     if DEVICE == "cuda":
         inputs = {k: v.to(_model.device) for k, v in inputs.items()}
@@ -84,6 +89,7 @@ def _generate(system: str, user: str) -> str:
             **inputs,
             max_new_tokens=MAX_NEW_TOKENS,
             do_sample=False,
+            pad_token_id=_tokenizer.eos_token_id,
         )
     decoded = _tokenizer.decode(out[0], skip_special_tokens=True)
     # Return only assistant continuation roughly
