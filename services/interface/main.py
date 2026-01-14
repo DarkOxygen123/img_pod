@@ -106,12 +106,6 @@ def pick_scenes_worker() -> str:
     url = urls[scenes_worker_index % len(urls)]
     scenes_worker_index = (scenes_worker_index + 1) % len(urls)
     return str(url)
-        raise HTTPException(status_code=500, detail="No 1:1 chat workers configured")
-    url = urls[chat1to1_worker_index % len(urls)]
-    chat1to1_worker_index = (chat1to1_worker_index + 1) % len(urls)
-    return str(url)ile_worker_index % len(urls)]
-    profile_worker_index = (profile_worker_index + 1) % len(urls)
-    return str(url)
 
 
 async def call_profile_worker(payload: dict) -> dict:
@@ -242,6 +236,7 @@ async def scenes_worker_handler(item: QueueItem) -> None:
 
 
 profile_worker = SingleWorker(profile_queue, profile_worker_handler)
+profile_generate_worker = SingleWorker(profile_generate_queue, profile_generate_handler)
 text2img_worker = SingleWorker(text2img_queue, text2img_worker_handler)
 chat1to1_worker = SingleWorker(chat1to1_queue, chat1to1_worker_handler)
 shorts_worker = SingleWorker(shorts_queue, shorts_worker_handler)
