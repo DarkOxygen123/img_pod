@@ -70,7 +70,9 @@ def pick_profile_worker() -> str:
     urls = interface_settings.profile_worker_urls
     if not urls:
         raise HTTPException(status_code=500, detail="No profile workers configured")
-    url = urls[prof
+    url = urls[profile_worker_index % len(urls)]
+    profile_worker_index = (profile_worker_index + 1) % len(urls)
+    return str(url)
 
 
 def pick_chat1to1_worker() -> str:
@@ -78,6 +80,10 @@ def pick_chat1to1_worker() -> str:
     global chat1to1_worker_index
     urls = interface_settings.chat1to1_worker_urls
     if not urls:
+        raise HTTPException(status_code=500, detail="No 1:1 chat workers configured")
+    url = urls[chat1to1_worker_index % len(urls)]
+    chat1to1_worker_index = (chat1to1_worker_index + 1) % len(urls)
+    return str(url)
 
 
 def pick_shorts_worker() -> str:
