@@ -212,3 +212,180 @@ class WorkerProfileRequest(BaseModel):
 class WorkerProfileResponse(BaseModel):
     avatar_features: FaceProfileFeaturesV1
     image_bytes: bytes
+
+
+# 1:1 Chat Image Generation Models
+
+class ChatMessage(BaseModel):
+    """Single chat message with sender info and timestamp."""
+    sender_handle: str
+    text: str
+    timestamp: str  # ISO 8601 format
+    tagged_handles: List[str] = Field(default_factory=list)
+
+
+class Chat1to1Participant(BaseModel):
+    """Participant in 1:1 chat with their profile features."""
+    handle: str
+    avatar_features: FaceProfileFeaturesV1
+
+
+class Chat1to1ImageGenRequest(BaseModel):
+    """Request for 1:1 chat contextual image generation."""
+    chat_messages: List[ChatMessage] = Field(..., min_length=1, max_length=15)
+    style: str  # e.g., "anime", "realistic", "3d_cartoon", "oil_painting"
+    participants: List[Chat1to1Participant] = Field(..., min_length=2)  # At least 2 chatters
+    target_message: str  # The specific message to visualize
+
+
+class Chat1to1ImageGenResponse(BaseModel):
+    """Response with generated image, caption, and final prompt."""
+    image_base64: str
+    caption: str  # 10-15 word social media caption
+    prompt_used: str  # Original or shortened user intent
+
+
+# LLM Service - Chat Context Expansion Models
+
+class LlmChat1to1ExpandRequest(BaseModel):
+    """Request for LLM to expand chat context into detailed prompt."""
+    chat_messages: List[ChatMessage]
+    style: str
+    participants: List[Chat1to1Participant]
+    target_message: str
+
+
+class LlmChat1to1ExpandResponse(BaseModel):
+    """LLM expanded prompt with context."""
+    expanded_prompt: str
+    shortened_target: Optional[str] = None  # If target_message was >25 words
+
+
+class LlmCaptionRequest(BaseModel):
+    """Request for short social media caption."""
+    prompt: str
+    
+
+class LlmCaptionResponse(BaseModel):
+    """Short caption for the generated image."""
+    caption: str  # 10-15 words
+
+
+# Worker - 1:1 Chat Image Generation
+
+class WorkerChat1to1Request(BaseModel):
+    """Worker request for 1:1 chat image generation."""
+    prompt: str
+    negative_prompt: Optional[str] = None
+    height: int = 1024
+    width: int = 1024
+    num_inference_steps: int = 9
+    guidance_scale: float = 0.0
+
+
+class WorkerChat1to1Response(BaseModel):
+    """Worker response with generated image."""
+    image_bytes: bytes
+
+
+# Shorts/Scenes Image Generation Models (No chat history, NSFW moderated)
+
+class ShortsParticipant(BaseModel):
+    """Participant in shorts generation with their profile features."""
+    handle: str
+    avatar_features: FaceProfileFeaturesV1
+
+
+class ShortsImageGenRequest(BaseModel):
+    """Request for shorts image generation (no chat history)."""
+    style: str  # e.g., "anime", "realistic", "3d_cartoon", "oil_painting"
+    participants: List[ShortsParticipant] = Field(..., min_length=1)
+    user_message: str  # The message to visualize
+
+
+class ShortsImageGenResponse(BaseModel):
+    """Response with generated image, caption, and prompt."""
+    image_base64: str
+    caption: str  # 10-15 word social media caption
+    prompt_used: str  # Original or shortened user message
+
+
+class ScenesParticipant(BaseModel):
+    """Participant in scenes generation with their profile features."""
+    handle: str
+    avatar_features: FaceProfileFeaturesV1
+
+
+class ScenesImageGenRequest(BaseModel):
+    """Request for scenes image generation (no chat history)."""
+    style: str  # e.g., "anime", "realistic", "3d_cartoon", "oil_painting"
+    participants: List[ScenesParticipant] = Field(..., min_length=1)
+    user_message: str  # The message to visualize
+
+
+class ScenesImageGenResponse(BaseModel):
+    """Response with generated image, caption, and prompt."""
+    image_base64: str
+    caption: str  # 10-15 word social media caption
+    prompt_used: str  # Original or shortened user message
+
+
+# LLM Service - Shorts/Scenes Expansion Models
+
+class LlmShortsExpandRequest(BaseModel):
+    """Request for LLM to expand shorts prompt with NSFW moderation."""
+    style: str
+    participants: List[ShortsParticipant]
+    user_message: str
+
+
+class LlmShortsExpandResponse(BaseModel):
+    """LLM expanded prompt with NSFW moderation applied."""
+    expanded_prompt: str
+    shortened_message: Optional[str] = None  # If user_message was >25 words
+
+
+class LlmScenesExpandRequest(BaseModel):
+    """Request for LLM to expand scenes prompt with NSFW moderation."""
+    style: str
+    participants: List[ScenesParticipant]
+    user_message: str
+
+
+class LlmScenesExpandResponse(BaseModel):
+    """LLM expanded prompt with NSFW moderation applied."""
+    expanded_prompt: str
+    shortened_message: Optional[str] = None  # If user_message was >25 words
+
+
+# Worker - Shorts/Scenes Image Generation
+
+class WorkerShortsRequest(BaseModel):
+    """Worker request for shorts image generation."""
+    prompt: str
+    negative_prompt: Optional[str] = None
+    height: int = 1024
+    width: int = 1024
+    num_inference_steps: int = 9
+    guidance_scale: float = 0.0
+
+
+class WorkerShortsResponse(BaseModel):
+    """Worker response with generated image."""
+    image_bytes: bytes
+
+
+class WorkerScenesRequest(BaseModel):
+    """Worker request for scenes image generation."""
+    prompt: str
+    negative_prompt: Optional[str] = None
+    height: int = 1024
+    width: int = 1024
+    num_inference_steps: int = 9
+    guidance_scale: float = 0.0
+
+
+class WorkerScenesResponse(BaseModel):
+    """Worker response with generated image."""
+    image_bytes: bytes
+

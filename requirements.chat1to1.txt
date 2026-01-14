@@ -1,0 +1,4 @@
+# 1:1 Chat Worker Requirements
+# Uses Z-Image Turbo for contextual chat image generation
+
+-r requirements.gpu.txt

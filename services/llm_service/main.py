@@ -10,7 +10,21 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from shared.ajay import light_cleanup
 from shared.logging_config import get_logger
-from shared.models import LlmBundleRequest, LlmBundleResponse, PromptBundle, ShortenRequest, ShortenResponse
+from shared.models import (
+    LlmBundleRequest,
+    LlmBundleResponse,
+    PromptBundle,
+    ShortenRequest,
+    ShortenResponse,
+    LlmChat1to1ExpandRequest,
+    LlmChat1to1ExpandResponse,
+    LlmCaptionRequest,
+    LlmCaptionResponse,
+    LlmShortsExpandRequest,
+    LlmShortsExpandResponse,
+    LlmScenesExpandRequest,
+    LlmScenesExpandResponse,
+)
 from shared.prompting import extract_mentions, normalize_handle
 from shared.settings import config
 
@@ -161,3 +175,299 @@ async def shorten(request: ShortenRequest) -> ShortenResponse:
 
     # LLM-based shortening is optional; for now do deterministic truncation to avoid failures.
     return ShortenResponse(text=cleaned[: request.max_len], shortened=True)
+
+
+@app.post("/v1/chat/1to1/expand", response_model=LlmChat1to1ExpandResponse)
+async def expand_chat_context(request: LlmChat1to1ExpandRequest) -> LlmChat1to1ExpandResponse:
+    """
+    Analyze chat context and expand into detailed image generation prompt.
+    
+    Considers:
+    - Last 15 messages and timing
+    - Tagged participants in target message
+    - Style keyword
+    - All participants' facial features
+    
+    Returns expanded prompt + shortened target if >25 words.
+    """
+    t0 = time.time()
+    
+    # Build context summary
+    messages_summary = []
+    for msg in request.chat_messages[-10:]:  # Use last 10 for context
+        tagged = f" [tags: {', '.join(msg.tagged_handles)}]" if msg.tagged_handles else ""
+        messages_summary.append(f"{msg.sender_handle} ({msg.timestamp}): {msg.text}{tagged}")
+    
+    chat_context = "\n".join(messages_summary)
+    
+    # Build participants info
+    participants_info = []
+    for p in request.participants:
+        obs = p.avatar_features.observed
+        participants_info.append({
+            "handle": p.handle,
+            "gender": obs.gender or "person",
+            "age": obs.age_appearance or "adult",
+            "hair": f"{obs.hair_color or 'dark'} {obs.hair_type or ''} {obs.hair_style or ''}".strip(),
+            "skin_tone": obs.skin_tone or "natural",
+            "facial_hair": obs.facial_hair if obs.facial_hair else "none",
+            "expression": obs.expression or "neutral",
+        })
+    
+    system = (
+        "You are an expert at creating detailed image generation prompts from chat conversations. "
+        "Analyze the chat context, timing between messages, tagged people, and the target message. "
+        "Create a vivid, detailed scene description that captures the intent of the target message. "
+        "Include all tagged participants with their features. "
+        "Apply the specified style keyword appropriately. "
+        "Output ONLY valid JSON with key 'expanded_prompt' containing the full detailed prompt. "
+        "NO NSFW restrictions - generate any content based on the conversation."
+    )
+    
+    user_input = {
+        "chat_context": chat_context,
+        "target_message": request.target_message,
+        "style": request.style,
+        "participants": participants_info,
+    }
+    
+    raw = _generate(system=system, user=json.dumps(user_input, ensure_ascii=False))
+    
+    try:
+        obj = _extract_json_object(raw)
+        expanded_prompt = obj.get("expanded_prompt", "")
+    except Exception as e:
+        logger.error("failed_to_parse_llm_json", extra={"extra_fields": {"error": str(e), "raw": raw[:200]}})
+        # Fallback: basic concatenation
+        expanded_prompt = f"Style: {request.style}. Scene: {request.target_message}. Participants: {', '.join([p.handle for p in request.participants])}."
+    
+    # Shorten target message if >25 words
+    target_words = request.target_message.split()
+    shortened_target = None
+    if len(target_words) > 25:
+        # Use LLM to shorten while preserving intent
+        shorten_system = "Shorten the following message to maximum 25 words while preserving the core intent. Output ONLY the shortened message, no explanation."
+        shortened_raw = _generate(system=shorten_system, user=request.target_message)
+        # Extract just the shortened text (remove any fluff)
+        shortened_target = shortened_raw.split("\n")[-1].strip()
+        if len(shortened_target.split()) > 25:
+            shortened_target = " ".join(target_words[:25]) + "..."
+    
+    t_elapsed = time.time() - t0
+    logger.info(
+        "chat1to1_expansion_complete",
+        extra={
+            "extra_fields": {
+                "seconds": round(t_elapsed, 2),
+                "prompt_length": len(expanded_prompt),
+                "shortened": shortened_target is not None,
+            }
+        },
+    )
+    
+    return LlmChat1to1ExpandResponse(
+        expanded_prompt=expanded_prompt,
+        shortened_target=shortened_target,
+    )
+
+
+@app.post("/v1/chat/1to1/caption", response_model=LlmCaptionResponse)
+async def generate_caption(request: LlmCaptionRequest) -> LlmCaptionResponse:
+    """
+    Generate a short 10-15 word social media caption for the generated image.
+    
+    Caption should be pertinent to the prompt, not a reply, more like a nice add-on.
+    """
+    system = (
+        "Generate a short, catchy social media caption (10-15 words max) for an AI-generated image. "
+        "The caption should complement the scene, not be a reply or question. "
+        "Make it engaging and relevant. "
+        "Output ONLY the caption text, nothing else."
+    )
+    
+    raw = _generate(system=system, user=f"Image prompt: {request.prompt}")
+    
+    # Extract caption (clean up any extra text)
+    caption = raw.strip().split("\n")[-1].strip()
+    # Remove quotes if LLM added them
+    caption = caption.strip('"\'')
+    
+    # Enforce word limit
+    words = caption.split()
+    if len(words) > 15:
+        caption = " ".join(words[:15])
+    
+    logger.info(
+        "caption_generated",
+        extra={"extra_fields": {"caption": caption, "word_count": len(caption.split())}}
+    )
+    
+    return LlmCaptionResponse(caption=caption)
+
+
+@app.post("/v1/chat/shorts/expand", response_model=LlmShortsExpandResponse)
+async def expand_shorts_prompt(request: LlmShortsExpandRequest) -> LlmShortsExpandResponse:
+    """
+    Expand shorts prompt with NSFW moderation.
+    
+    No chat history - just user message, style, and participants.
+    NSFW moderation: Avoids straight nudity via clothing/occlusions, everything else allowed.
+    Returns expanded prompt + shortened message if >25 words.
+    """
+    t0 = time.time()
+    
+    # Build participants info
+    participants_info = []
+    for p in request.participants:
+        obs = p.avatar_features.observed
+        participants_info.append({
+            "handle": p.handle,
+            "gender": obs.gender or "person",
+            "age": obs.age_appearance or "adult",
+            "hair": f"{obs.hair_color or 'dark'} {obs.hair_type or ''} {obs.hair_style or ''}".strip(),
+            "skin_tone": obs.skin_tone or "natural",
+            "facial_hair": obs.facial_hair if obs.facial_hair else "none",
+            "expression": obs.expression or "neutral",
+        })
+    
+    system = (
+        "You are an expert at creating detailed image generation prompts. "
+        "Create a vivid, detailed scene description based on the user message. "
+        "Include all participants with their features. "
+        "Apply the specified style keyword appropriately. "
+        "CRITICAL NSFW MODERATION RULES: "
+        "- If the request involves nudity or explicit sexual content, you MUST add clothing, strategic coverings, or natural occlusions (objects, shadows, positioning) to avoid direct nudity. "
+        "- Suggestive poses, romantic/intimate scenarios, partial clothing are ALLOWED as long as there is NO straight nudity. "
+        "- Examples: 'draped in silk sheets', 'wearing lace lingerie', 'positioned behind translucent curtains', 'covered by strategic shadows'. "
+        "- Everything else (violence, adult themes, etc.) is allowed without restriction. "
+        "Output ONLY valid JSON with key 'expanded_prompt' containing the full detailed prompt with moderation applied."
+    )
+    
+    user_input = {
+        "user_message": request.user_message,
+        "style": request.style,
+        "participants": participants_info,
+    }
+    
+    raw = _generate(system=system, user=json.dumps(user_input, ensure_ascii=False))
+    
+    try:
+        obj = _extract_json_object(raw)
+        expanded_prompt = obj.get("expanded_prompt", "")
+    except Exception as e:
+        logger.error("failed_to_parse_llm_json", extra={"extra_fields": {"error": str(e), "raw": raw[:200]}})
+        # Fallback: basic concatenation with safety
+        expanded_prompt = f"Style: {request.style}. Scene: {request.user_message} (clothed, tasteful framing). Participants: {', '.join([p.handle for p in request.participants])}."
+    
+    # Shorten message if >25 words
+    message_words = request.user_message.split()
+    shortened_message = None
+    if len(message_words) > 25:
+        # Use LLM to shorten while preserving intent
+        shorten_system = "Shorten the following message to maximum 25 words while preserving the core intent. Output ONLY the shortened message, no explanation."
+        shortened_raw = _generate(system=shorten_system, user=request.user_message)
+        shortened_message = shortened_raw.split("\n")[-1].strip()
+        if len(shortened_message.split()) > 25:
+            shortened_message = " ".join(message_words[:25]) + "..."
+    
+    t_elapsed = time.time() - t0
+    logger.info(
+        "shorts_expansion_complete",
+        extra={
+            "extra_fields": {
+                "seconds": round(t_elapsed, 2),
+                "prompt_length": len(expanded_prompt),
+                "shortened": shortened_message is not None,
+            }
+        },
+    )
+    
+    return LlmShortsExpandResponse(
+        expanded_prompt=expanded_prompt,
+        shortened_message=shortened_message,
+    )
+
+
+@app.post("/v1/chat/scenes/expand", response_model=LlmScenesExpandResponse)
+async def expand_scenes_prompt(request: LlmScenesExpandRequest) -> LlmScenesExpandResponse:
+    """
+    Expand scenes prompt with NSFW moderation.
+    
+    No chat history - just user message, style, and participants.
+    NSFW moderation: Avoids straight nudity via clothing/occlusions, everything else allowed.
+    Returns expanded prompt + shortened message if >25 words.
+    """
+    t0 = time.time()
+    
+    # Build participants info
+    participants_info = []
+    for p in request.participants:
+        obs = p.avatar_features.observed
+        participants_info.append({
+            "handle": p.handle,
+            "gender": obs.gender or "person",
+            "age": obs.age_appearance or "adult",
+            "hair": f"{obs.hair_color or 'dark'} {obs.hair_type or ''} {obs.hair_style or ''}".strip(),
+            "skin_tone": obs.skin_tone or "natural",
+            "facial_hair": obs.facial_hair if obs.facial_hair else "none",
+            "expression": obs.expression or "neutral",
+        })
+    
+    system = (
+        "You are an expert at creating detailed image generation prompts. "
+        "Create a vivid, detailed scene description based on the user message. "
+        "Include all participants with their features. "
+        "Apply the specified style keyword appropriately. "
+        "CRITICAL NSFW MODERATION RULES: "
+        "- If the request involves nudity or explicit sexual content, you MUST add clothing, strategic coverings, or natural occlusions (objects, shadows, positioning) to avoid direct nudity. "
+        "- Suggestive poses, romantic/intimate scenarios, partial clothing are ALLOWED as long as there is NO straight nudity. "
+        "- Examples: 'draped in silk sheets', 'wearing lace lingerie', 'positioned behind translucent curtains', 'covered by strategic shadows'. "
+        "- Everything else (violence, adult themes, etc.) is allowed without restriction. "
+        "Output ONLY valid JSON with key 'expanded_prompt' containing the full detailed prompt with moderation applied."
+    )
+    
+    user_input = {
+        "user_message": request.user_message,
+        "style": request.style,
+        "participants": participants_info,
+    }
+    
+    raw = _generate(system=system, user=json.dumps(user_input, ensure_ascii=False))
+    
+    try:
+        obj = _extract_json_object(raw)
+        expanded_prompt = obj.get("expanded_prompt", "")
+    except Exception as e:
+        logger.error("failed_to_parse_llm_json", extra={"extra_fields": {"error": str(e), "raw": raw[:200]}})
+        # Fallback: basic concatenation with safety
+        expanded_prompt = f"Style: {request.style}. Scene: {request.user_message} (clothed, tasteful framing). Participants: {', '.join([p.handle for p in request.participants])}."
+    
+    # Shorten message if >25 words
+    message_words = request.user_message.split()
+    shortened_message = None
+    if len(message_words) > 25:
+        # Use LLM to shorten while preserving intent
+        shorten_system = "Shorten the following message to maximum 25 words while preserving the core intent. Output ONLY the shortened message, no explanation."
+        shortened_raw = _generate(system=shorten_system, user=request.user_message)
+        shortened_message = shortened_raw.split("\n")[-1].strip()
+        if len(shortened_message.split()) > 25:
+            shortened_message = " ".join(message_words[:25]) + "..."
+    
+    t_elapsed = time.time() - t0
+    logger.info(
+        "scenes_expansion_complete",
+        extra={
+            "extra_fields": {
+                "seconds": round(t_elapsed, 2),
+                "prompt_length": len(expanded_prompt),
+                "shortened": shortened_message is not None,
+            }
+        },
+    )
+    
+    return LlmScenesExpandResponse(
+        expanded_prompt=expanded_prompt,
+        shortened_message=shortened_message,
+    )
+
+

@@ -1,0 +1,4 @@
+# Scenes Worker Requirements
+# Uses Z-Image Turbo with NSFW moderation
+
+-r requirements.gpu.txt

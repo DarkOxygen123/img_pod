@@ -14,13 +14,22 @@ class InterfaceSettings(BaseSettings):
     retry_after_cap_ms: int = 120_000
     profile_queue_max: int = 10
     text2img_queue_max: int = 10
+    chat1to1_queue_max: int = 10
+    shorts_queue_max: int = 10
+    scenes_queue_max: int = 10
     regen_attempts: int = 2
     profile_sla_ms: int = 90_000
     text2img_sla_ms: int = 8_000
-    llm_service_url: HttpUrl = "https://cf0pc97a1e9lki-8002.proxy.runpod.net"
-    selfie_feature_worker_urls: List[HttpUrl] = ["https://wp6is8takig1z0-8003.proxy.runpod.net"]
-    profile_worker_urls: List[HttpUrl] = ["https://ika5ni96asnpts-8003.proxy.runpod.net"]
+    chat1to1_sla_ms: int = 15_000
+    shorts_sla_ms: int = 15_000
+    scenes_sla_ms: int = 15_000
+    llm_service_url: HttpUrl = "https://abj0jt7cd4hgdy-8002.proxy.runpod.net"
+    selfie_feature_worker_urls: List[HttpUrl] = ["https://97dsnjce4yxe96-8003.proxy.runpod.net"]
+    profile_worker_urls: List[HttpUrl] = ["https://x690sjq9dtevw4-8003.proxy.runpod.net"]
     text2img_worker_urls: List[HttpUrl] = ["https://tx5t471v3aljjd-8004.proxy.runpod.net"]
+    chat1to1_worker_urls: List[HttpUrl] = ["https://6eubyihk4kt8l0-8005.proxy.runpod.net"]
+    shorts_worker_urls: List[HttpUrl] = ["https://klu0524bz1nx1i-8006.proxy.runpod.net"]
+    scenes_worker_urls: List[HttpUrl] = ["https://5r1nfrz20lc715-8007.proxy.runpod.net"]
 
     model_config = SettingsConfigDict(env_prefix="INTERFACE_", extra="ignore")
 
@@ -50,6 +59,27 @@ class Text2ImgWorkerSettings(BaseSettings):
     port: int = 8004
 
     model_config = SettingsConfigDict(env_prefix="TEXT2IMG_WORKER_", extra="ignore")
+
+
+class Chat1to1WorkerSettings(BaseSettings):
+    host: str = "0.0.0.0"
+    port: int = 8005
+
+    model_config = SettingsConfigDict(env_prefix="CHAT1TO1_WORKER_", extra="ignore")
+
+
+class ShortsWorkerSettings(BaseSettings):
+    host: str = "0.0.0.0"
+    port: int = 8006
+
+    model_config = SettingsConfigDict(env_prefix="SHORTS_WORKER_", extra="ignore")
+
+
+class ScenesWorkerSettings(BaseSettings):
+    host: str = "0.0.0.0"
+    port: int = 8007
+
+    model_config = SettingsConfigDict(env_prefix="SCENES_WORKER_", extra="ignore")
 
 
 class AppConfig:
@@ -132,6 +162,18 @@ class AppConfig:
     @lru_cache(maxsize=1)
     def text2img_worker_settings(self) -> Text2ImgWorkerSettings:
         return Text2ImgWorkerSettings()  # type: ignore[arg-type]
+
+    @lru_cache(maxsize=1)
+    def chat1to1_worker_settings(self) -> Chat1to1WorkerSettings:
+        return Chat1to1WorkerSettings()  # type: ignore[arg-type]
+
+    @lru_cache(maxsize=1)
+    def shorts_worker_settings(self) -> ShortsWorkerSettings:
+        return ShortsWorkerSettings()  # type: ignore[arg-type]
+
+    @lru_cache(maxsize=1)
+    def scenes_worker_settings(self) -> ScenesWorkerSettings:
+        return ScenesWorkerSettings()  # type: ignore[arg-type]
 
 
 config = AppConfig()
