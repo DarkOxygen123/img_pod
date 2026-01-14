@@ -203,12 +203,39 @@ async def chat1to1_worker_handler(item: QueueItem) -> None:
     )
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
-    image_b64 = resp.json()["image_bytes_b64"]
-    imagechat1to1_worker_urls": [str(u) for u in interface_settings.chat1to1_worker_urls],
-        "llm_service_url": str(interface_settings.llm_service_url)
-    }})
+    image_bytes = resp.content
+    item.future.set_result(image_bytes)
+
+
+async def shorts_worker_handler(item: QueueItem) -> None:
+    """Queue handler for shorts image generation."""
+    worker_url = item.payload["worker_url"]
+    resp = await post_json(
+        str(worker_url) + "/v1/chat/shorts/generate",
+        item.payload["body"],
+        timeout_s=interface_settings.shorts_sla_ms / 1000,
+    )
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
+    image_bytes = resp.content
+    item.future.set_result(image_bytes)
+
+
+async def scenes_worker_handler(item: QueueItem) -> None:
+    """Queue handler for scenes image generation."""
+    worker_url = item.payload["worker_url"]
+    resp = await post_json(
+        str(worker_url) + "/v1/chat/scenes/generate",
+        item.payload["body"],
+        timeout_s=interface_settings.scenes_sla_ms / 1000,
+    )
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
+    image_bytes = resp.content
+    item.future.set_result(image_bytes)
+
+
 profile_worker = SingleWorker(profile_queue, profile_worker_handler)
-profile_generate_worker = SingleWorker(profile_generate_queue, profile_generate_handler)
 text2img_worker = SingleWorker(text2img_queue, text2img_worker_handler)
 chat1to1_worker = SingleWorker(chat1to1_queue, chat1to1_worker_handler)
 shorts_worker = SingleWorker(shorts_queue, shorts_worker_handler)
@@ -371,8 +398,51 @@ async def health() -> JSONResponse:
 
 @app.post("/v1/profile/update")
 async def profile_update(body: ProfileUpdateRequest = Body(...)) -> Response:
+    """Update specific profile fields and regenerate avatar image."""
+    # Build updated avatar_features from individual fields
+    avatar_features = {
+        "observed": {},
+        "dress": {},
+        "accessories": {},
+        "meta": {
+            "face_detected": True,
+            "num_faces": 1,
+            "quality_score": 1.0
+        }
+    }
+    
+    # Hair attributes
+    if body.hair_color is not None:
+        avatar_features["observed"]["hair_color"] = body.hair_color
+    if body.hair_type is not None:
+        avatar_features["observed"]["hair_type"] = body.hair_type
+    if body.hair_style is not None:
+        avatar_features["observed"]["hair_style"] = body.hair_style
+    if body.hair_length is not None:
+        avatar_features["observed"]["hair_length"] = body.hair_length
+    
+    # Skin attributes
+    if body.skin_tone is not None:
+        avatar_features["observed"]["skin_tone"] = body.skin_tone
+    if body.skin_undertone is not None:
+        avatar_features["observed"]["skin_undertone"] = body.skin_undertone
+    
+    # Accessories
+    if body.hat_present is not None:
+        avatar_features["accessories"]["hat_present"] = body.hat_present
+    if body.hat_style is not None:
+        avatar_features["accessories"]["hat_style"] = body.hat_style
+    if body.hat_color is not None:
+        avatar_features["accessories"]["hat_color"] = body.hat_color
+    if body.mask_present is not None:
+        avatar_features["accessories"]["mask_present"] = body.mask_present
+    if body.mask_type is not None:
+        avatar_features["accessories"]["mask_type"] = body.mask_type
+    if body.mask_color is not None:
+        avatar_features["accessories"]["mask_color"] = body.mask_color
+    
     # Queue features to profile GPU generate
-    gen_payload = {"avatar_features": body.avatar_features.model_dump()}
+    gen_payload = {"avatar_features": avatar_features}
     gen_future = await enqueue_or_429(profile_generate_queue, gen_payload, interface_settings.profile_sla_ms, profile_generate_worker)
     try:
         image_bytes: bytes = await asyncio.wait_for(gen_future, timeout=interface_settings.profile_sla_ms / 1000)
@@ -558,7 +628,7 @@ async def chat_1to1_imagegen(body: Chat1to1ImageGenRequest = Body(...)) -> JSONR
     
     # Step 3: Generate caption via LLM
     logger.info("chat1to1_calling_llm_caption")
-    caption_payload = {"prompt": expanded_prompt}
+    caption_payload = {"prompt": expanded_prompt, "context_type": "1to1"}
     caption_resp = await post_json(
         str(interface_settings.llm_service_url) + "/v1/chat/1to1/caption",
         caption_payload,
@@ -566,7 +636,7 @@ async def chat_1to1_imagegen(body: Chat1to1ImageGenRequest = Body(...)) -> JSONR
     )
     if caption_resp.status_code >= 400:
         logger.warning("chat1to1_caption_failed", extra={"extra_fields": {"error": caption_resp.content.decode(errors='replace')}})
-        caption = "✨ AI-generated moment"  # Fallback caption
+        caption = "✨ Us, together"  # Fallback caption (1st person)
     else:
         caption = caption_resp.json()["caption"]
     
@@ -689,7 +759,7 @@ async def chat_shorts_generate(body: ShortsImageGenRequest = Body(...)) -> JSONR
     
     # Step 3: Generate caption via LLM
     logger.info("shorts_calling_llm_caption")
-    caption_payload = {"prompt": expanded_prompt}
+    caption_payload = {"prompt": expanded_prompt, "context_type": "shorts"}
     caption_resp = await post_json(
         str(interface_settings.llm_service_url) + "/v1/chat/1to1/caption",
         caption_payload,
@@ -697,7 +767,7 @@ async def chat_shorts_generate(body: ShortsImageGenRequest = Body(...)) -> JSONR
     )
     if caption_resp.status_code >= 400:
         logger.warning("shorts_caption_failed", extra={"extra_fields": {"error": caption_resp.content.decode(errors='replace')}})
-        caption = "✨ AI-generated shorts"  # Fallback caption
+        caption = "✨ Feeling this moment"  # Fallback caption (emotion-focused)
     else:
         caption = caption_resp.json()["caption"]
     
@@ -820,7 +890,7 @@ async def chat_scenes_generate(body: ScenesImageGenRequest = Body(...)) -> JSONR
     
     # Step 3: Generate caption via LLM
     logger.info("scenes_calling_llm_caption")
-    caption_payload = {"prompt": expanded_prompt}
+    caption_payload = {"prompt": expanded_prompt, "context_type": "scenes"}
     caption_resp = await post_json(
         str(interface_settings.llm_service_url) + "/v1/chat/1to1/caption",
         caption_payload,
@@ -828,7 +898,7 @@ async def chat_scenes_generate(body: ScenesImageGenRequest = Body(...)) -> JSONR
     )
     if caption_resp.status_code >= 400:
         logger.warning("scenes_caption_failed", extra={"extra_fields": {"error": caption_resp.content.decode(errors='replace')}})
-        caption = "✨ AI-generated scene"  # Fallback caption
+        caption = "✨ Capturing this vibe"  # Fallback caption (emotion-focused)
     else:
         caption = caption_resp.json()["caption"]
     

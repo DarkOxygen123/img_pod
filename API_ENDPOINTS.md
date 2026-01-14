@@ -81,37 +81,32 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
 ---
 
 ### POST /v1/profile/update
-**Description**: Updates an existing user profile with new features.
+**Description**: Updates specific profile fields (hair, skin, accessories) and regenerates avatar.
 
 **Request**:
 ```json
 {
-  "avatar_features": {
-    "observed": {
-      "face_shape": "oval",
-      "hair_color": "brown"
-    },
-    "dress": {
-      "dress_color": "blue"
-    },
-    "accessories": {
-      "glasses_present": "yes"
-    },
-    "meta": {
-      "face_detected": true,
-      "num_faces": 1,
-      "quality_score": 0.95
-    }
-  }
+  "hair_color": "blonde",
+  "hair_type": "wavy",
+  "hair_style": "long",
+  "hair_length": "shoulder-length",
+  "skin_tone": "fair",
+  "skin_undertone": "cool",
+  "hat_present": "yes",
+  "hat_style": "fedora",
+  "hat_color": "black",
+  "mask_present": "no"
 }
 ```
 
+**Request Schema** (all fields optional):
+- **Hair**: `hair_color`, `hair_type`, `hair_style`, `hair_length`
+- **Skin**: `skin_tone`, `skin_undertone`
+- **Accessories**: `hat_present`, `hat_style`, `hat_color`, `mask_present`, `mask_type`, `mask_color`
+
 **Success Response** (200):
-```json
-{
-  "status": "ok"
-}
-```
+- Content-Type: `image/png`
+- Binary PNG image of regenerated avatar
 
 ---
 
@@ -119,6 +114,11 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
 
 ### POST /v1/chat/1to1/imagegen
 **Description**: Generates a contextual image based on 1:1 chat conversation history. **NO NSFW RESTRICTIONS** - generates any content based on context.
+
+**Important Notes**:
+- **Tagged Handles**: Use `tagged_handles` to reference people NOT in the chat (e.g., friends mentioned in conversation). The 2 main participants are already included in `participants` array.
+- **Participants**: Must include complete `avatar_features` JSON from profile creation for both chatters.
+- **Captions**: Generated in 1st/2nd person ("us", "we", "our") - NOT 3rd person.
 
 **Request**:
 ```json
@@ -132,15 +132,15 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
     },
     {
       "sender_handle": "bob",
-      "text": "It's beautiful! Reminds me of our trip to the beach.",
+      "text": "It's beautiful! Reminds me of our trip with @charlie",
       "timestamp": "2026-01-14T18:01:30Z",
-      "tagged_handles": ["alice"]
+      "tagged_handles": ["charlie"]
     },
     {
       "sender_handle": "alice",
-      "text": "Let's imagine us walking on the beach during sunset, holding hands",
+      "text": "Let's imagine us walking on the beach during sunset",
       "timestamp": "2026-01-14T18:03:00Z",
-      "tagged_handles": ["bob"]
+      "tagged_handles": []
     }
   ],
   "style": "realistic",
@@ -151,7 +151,26 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
         "observed": {
           "face_shape": "oval",
           "hair_color": "blonde",
-          "gender": "female"
+          "hair_type": "wavy",
+          "hair_style": "long",
+          "hair_length": "shoulder-length",
+          "eye_color": "blue",
+          "eye_shape": "almond",
+          "skin_tone": "fair",
+          "skin_undertone": "cool",
+          "age_appearance": "young adult",
+          "age_range": "20-30",
+          "gender": "female",
+          "expression": "happy"
+        },
+        "dress": {
+          "dress_color": "white",
+          "dress_type": "casual"
+        },
+        "accessories": {
+          "hat_present": "no",
+          "glasses_present": "no",
+          "mask_present": "no"
         },
         "meta": {
           "face_detected": true,
@@ -166,7 +185,18 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
         "observed": {
           "face_shape": "square",
           "hair_color": "black",
+          "hair_type": "straight",
+          "hair_style": "short",
+          "eye_color": "brown",
+          "skin_tone": "medium",
+          "age_range": "25-35",
           "gender": "male"
+        },
+        "dress": {},
+        "accessories": {
+          "hat_present": "no",
+          "glasses_present": "no",
+          "mask_present": "no"
         },
         "meta": {
           "face_detected": true,
@@ -176,32 +206,32 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
       }
     }
   ],
-  "target_message": "Let's imagine us walking on the beach during sunset, holding hands"
+  "target_message": "Let's imagine us walking on the beach during sunset"
 }
 ```
 
 **Request Schema**:
 - `chat_messages` (array, 1-15 messages): Conversation history
-  - `sender_handle` (string): Username of sender
+  - `sender_handle` (string): Username of sender (must match a participant)
   - `text` (string): Message content
   - `timestamp` (string): ISO 8601 timestamp
-  - `tagged_handles` (array): Mentioned usernames
+  - `tagged_handles` (array): Usernames mentioned who are NOT participants (e.g., friends referenced in conversation)
 - `style` (string): Visual style - "anime", "realistic", "3d_cartoon", "oil_painting", "watercolor", "comic_book", "pixel_art"
-- `participants` (array, minimum 2): Chat participants with avatar features
+- `participants` (array, exactly 2): The 2 people chatting with COMPLETE avatar features from profile creation
 - `target_message` (string): The specific message to visualize
 
 **Success Response** (200):
 ```json
 {
   "image_base64": "iVBORw0KGgoAAAANSUhEUg...",
-  "caption": "Alice and Bob strolling on a sunset beach, hands intertwined",
-  "prompt_used": "walking on the beach during sunset, holding hands"
+  "caption": "Our perfect sunset moment together 🌅",
+  "prompt_used": "walking on the beach during sunset"
 }
 ```
 
 **Response Schema**:
 - `image_base64` (string): Base64-encoded PNG image (1024x1024)
-- `caption` (string): 10-15 word social media caption
+- `caption` (string): 10-15 word intimate caption using 1st/2nd person perspective
 - `prompt_used` (string): Final prompt used (may be shortened if original >25 words)
 
 **Error Response** (429):
@@ -220,6 +250,10 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
 ### POST /v1/chat/shorts/generate
 **Description**: Generates short-form content images (similar to Instagram Stories/TikTok). **NSFW MODERATED** - avoids explicit nudity by adding clothing/occlusions.
 
+**Important Notes**:
+- **Participants**: Must include complete `avatar_features` JSON from profile creation.
+- **Captions**: Emotion-focused, capturing the FEELING/MOOD rather than describing the image.
+
 **Request**:
 ```json
 {
@@ -231,8 +265,22 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
         "observed": {
           "face_shape": "oval",
           "hair_color": "blonde",
+          "hair_type": "wavy",
+          "hair_style": "long",
+          "hair_length": "shoulder-length",
+          "eye_color": "blue",
+          "skin_tone": "fair",
+          "age_range": "20-30",
           "gender": "female",
-          "age_range": "20-30"
+          "expression": "confident"
+        },
+        "dress": {
+          "dress_type": "elegant"
+        },
+        "accessories": {
+          "hat_present": "no",
+          "glasses_present": "no",
+          "mask_present": "no"
         },
         "meta": {
           "face_detected": true,
@@ -248,31 +296,17 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
 
 **Request Schema**:
 - `style` (string): Visual style - "anime", "realistic", "3d_cartoon", "oil_painting", "watercolor", "comic_book", "pixel_art"
-- `participants` (array, minimum 1): People to include with their features
+- `participants` (array, minimum 1): People to include with COMPLETE avatar features from profile creation
 - `user_message` (string): Description of the scene to generate
 
 **Success Response** (200):
 ```json
 {
   "image_base64": "iVBORw0KGgoAAAANSUhEUg...",
-  "caption": "Alice strikes a pose in her elegant sanctuary",
-  "prompt_used": "A confident woman posing elegantly in a luxurious bedroom"
-}
-```
-
-**Response Schema**:
-- `image_base64` (string): Base64-encoded PNG image (1024x1024)
-- `caption` (string): 10-15 word social media caption
-- `prompt_used` (string): Final prompt used (may be shortened if original >25 words)
-
-**NSFW Handling**: If the request contains sexually suggestive content, the system automatically adds clothing/occlusion elements (e.g., "draped in silk sheets", "wearing lace lingerie", "positioned behind translucent curtains") to avoid explicit nudity.
-
----
-
-## 4. Scenes Image Generation
-
-### POST /v1/chat/scenes/generate
-**Description**: Generates scene-based images (identical to shorts, but tracked separately for GPU usage). **NSFW MODERATED** - avoids explicit nudity.
+  "caption": "Confidence radiating through every pose ✨",
+  Important Notes**:
+- **Participants**: Must include complete `avatar_features` JSON from profile creation.
+- **Captions**: Emotion-focused, capturing the FEELING/MOOD rather than describing the image.
 
 **Request**:
 ```json
@@ -285,8 +319,20 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
         "observed": {
           "face_shape": "square",
           "hair_color": "black",
+          "hair_type": "straight",
+          "eye_color": "brown",
+          "skin_tone": "medium",
+          "age_range": "25-35",
           "gender": "male",
-          "age_range": "25-35"
+          "expression": "excited"
+        },
+        "dress": {
+          "dress_type": "casual"
+        },
+        "accessories": {
+          "hat_present": "no",
+          "glasses_present": "no",
+          "mask_present": "no"
         },
         "meta": {
           "face_detected": true,
@@ -301,8 +347,16 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
         "observed": {
           "face_shape": "round",
           "hair_color": "brown",
-          "gender": "male",
-          "age_range": "30-40"
+          "skin_tone": "tan",
+          "age_range": "30-40",
+          "gender": "male"
+        },
+        "dress": {},
+        "accessories": {
+          "hat_present": "no",
+          "glasses_present": "yes",
+          "glasses_type": "round",
+          "mask_present": "no"
         },
         "meta": {
           "face_detected": true,
@@ -315,6 +369,24 @@ All endpoints return JSON responses. Timestamps use ISO 8601 format (e.g., `2026
   "user_message": "Two friends celebrating a victory at a sports bar"
 }
 ```
+
+**Request Schema**: (Same as Shorts)
+- `style` (string): Visual style
+- `participants` (array, minimum 1): People to include with COMPLETE avatar features from profile creation
+- `user_message` (string): Scene description
+
+**Success Response** (200):
+```json
+{
+  "image_base64": "iVBORw0KGgoAAAANSUhEUg...",
+  "caption": "Victory tastes sweeter when shared with your crew 🍻",
+  "prompt_used": "Two friends celebrating a victory at a sports bar"
+}
+```
+
+**Response Schema**: (Same as Shorts)
+- `image_base64` (string): Base64-encoded PNG image
+- `caption` (string): 10-15 word emotion-focused caption (captures feeling)
 
 **Request Schema**: (Same as Shorts)
 - `style` (string): Visual style

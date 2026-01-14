@@ -147,7 +147,25 @@ class ProfileCreateRequest(BaseModel):
 
 
 class ProfileUpdateRequest(BaseModel):
-    avatar_features: FaceProfileFeaturesV1
+    """Update specific profile fields. Only provided fields will be updated."""
+
+    # Hair attributes
+    hair_color: Optional[str] = None
+    hair_type: Optional[str] = None
+    hair_style: Optional[str] = None
+    hair_length: Optional[str] = None
+
+    # Skin attributes
+    skin_tone: Optional[str] = None
+    skin_undertone: Optional[str] = None
+
+    # Accessories
+    hat_present: Optional[str] = None  # yes, no
+    hat_style: Optional[str] = None
+    hat_color: Optional[str] = None
+    mask_present: Optional[str] = None  # yes, no
+    mask_type: Optional[str] = None
+    mask_color: Optional[str] = None
 
 
 class ChatPrivateImageGenRequest(BaseModel):
@@ -264,7 +282,8 @@ class LlmChat1to1ExpandResponse(BaseModel):
 class LlmCaptionRequest(BaseModel):
     """Request for short social media caption."""
     prompt: str
-    
+    context_type: str = "1to1"  # "1to1" or "shorts" or "scenes"
+
 
 class LlmCaptionResponse(BaseModel):
     """Short caption for the generated image."""

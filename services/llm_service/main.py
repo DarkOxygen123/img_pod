@@ -275,15 +275,26 @@ async def expand_chat_context(request: LlmChat1to1ExpandRequest) -> LlmChat1to1E
 async def generate_caption(request: LlmCaptionRequest) -> LlmCaptionResponse:
     """
     Generate a short 10-15 word social media caption for the generated image.
-    
-    Caption should be pertinent to the prompt, not a reply, more like a nice add-on.
+
+    Caption style varies by context:
+    - 1to1: Intimate, 1st/2nd person ("us", "we", "our") - NOT 3rd person
+    - shorts/scenes: Emotion-focused, captures feeling not description
     """
-    system = (
-        "Generate a short, catchy social media caption (10-15 words max) for an AI-generated image. "
-        "The caption should complement the scene, not be a reply or question. "
-        "Make it engaging and relevant. "
-        "Output ONLY the caption text, nothing else."
-    )
+    if request.context_type == "1to1":
+        system = (
+            "Generate a short, intimate caption (10-15 words max) for a 1:1 chat image. "
+            "Use 1st or 2nd person perspective (us, we, our, you, me). "
+            "NEVER use 3rd person (they, Alice and Bob, etc). "
+            "Express the shared moment/emotion between the two people. "
+            "Output ONLY the caption text, nothing else."
+        )
+    else:  # shorts or scenes
+        system = (
+            "Generate a short, emotion-focused caption (10-15 words max) for a social media image. "
+            "Capture the FEELING or MOOD, not just describe what's shown. "
+            "Make it evocative and engaging. "
+            "Output ONLY the caption text, nothing else."
+        )
     
     raw = _generate(system=system, user=f"Image prompt: {request.prompt}")
     
