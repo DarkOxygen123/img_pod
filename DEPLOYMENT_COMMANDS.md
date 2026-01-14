@@ -3,12 +3,13 @@
 ## Pod Connection & Deployment
 
 ### 1. Interface Pod (CPU - Port 8000)
+
 ```bash
 ssh root@154.54.102.17 -p 18245 -i ~/.ssh/suko_runpod
 
 # Inside pod
 cd /workspace
-git clone <YOUR_REPO_URL> img_pod
+git clone https://github.com/DarkOxygen123/img_pod img_pod
 cd img_pod
 bash deploy_interface.sh
 
@@ -16,18 +17,19 @@ bash deploy_interface.sh
 tail -f /tmp/interface-8000.log
 ```
 
-**Pod ID**: bw77wupwq7k752  
+**Pod ID**: bw77wupwq7k752
 **URL**: https://bw77wupwq7k752-8000.proxy.runpod.net
 
 ---
 
 ### 2. LLM Service Pod (A40 - Port 8002)
+
 ```bash
 ssh root@213.173.102.200 -p 18662 -i ~/.ssh/suko_runpod
 
 # Inside pod
 cd /workspace
-git clone <YOUR_REPO_URL> img_pod
+git clone https://github.com/DarkOxygen123/img_pod img_pod
 cd img_pod
 bash deploy_llm.sh
 
@@ -35,18 +37,19 @@ bash deploy_llm.sh
 tail -f /tmp/llm-service-8002.log
 ```
 
-**Pod ID**: abj0jt7cd4hgdy  
+**Pod ID**: abj0jt7cd4hgdy
 **URL**: https://abj0jt7cd4hgdy-8002.proxy.runpod.net
 
 ---
 
 ### 3. Selfie Feature Worker Pod (RTX 6000 Ada - Port 8003)
+
 ```bash
 ssh root@216.81.245.79 -p 39920 -i ~/.ssh/suko_runpod
 
 # Inside pod
 cd /workspace
-git clone <YOUR_REPO_URL> img_pod
+git clone https://github.com/DarkOxygen123/img_pod img_pod
 cd img_pod
 bash deploy_selfie_feature.sh
 
@@ -54,18 +57,19 @@ bash deploy_selfie_feature.sh
 tail -f /tmp/selfie-feature-8003.log
 ```
 
-**Pod ID**: 97dsnjce4yxe96  
+**Pod ID**: 97dsnjce4yxe96
 **URL**: https://97dsnjce4yxe96-8003.proxy.runpod.net
 
 ---
 
 ### 4. Profile Worker Pod (A40 - Port 8003)
+
 ```bash
 ssh root@69.30.85.91 -p 22125 -i ~/.ssh/suko_runpod
 
 # Inside pod
 cd /workspace
-git clone <YOUR_REPO_URL> img_pod
+git clone https://github.com/DarkOxygen123/img_pod img_pod
 cd img_pod
 bash deploy_profile.sh
 
@@ -73,18 +77,19 @@ bash deploy_profile.sh
 tail -f /tmp/profile-worker-8003.log
 ```
 
-**Pod ID**: x690sjq9dtevw4  
+**Pod ID**: x690sjq9dtevw4
 **URL**: https://x690sjq9dtevw4-8003.proxy.runpod.net
 
 ---
 
 ### 5. 1:1 Chat Worker Pod (A40 - Port 8005)
+
 ```bash
 ssh root@194.68.245.48 -p 22019 -i ~/.ssh/suko_runpod
 
 # Inside pod
 cd /workspace
-git clone <YOUR_REPO_URL> img_pod
+git clone https://github.com/DarkOxygen123/img_pod img_pod
 cd img_pod
 bash deploy_chat1to1.sh
 
@@ -92,18 +97,19 @@ bash deploy_chat1to1.sh
 tail -f /tmp/chat1to1-worker-8005.log
 ```
 
-**Pod ID**: 6eubyihk4kt8l0  
+**Pod ID**: 6eubyihk4kt8l0
 **URL**: https://6eubyihk4kt8l0-8005.proxy.runpod.net
 
 ---
 
 ### 6. Shorts Worker Pod (A40 - Port 8006)
+
 ```bash
 ssh root@194.68.245.18 -p 22111 -i ~/.ssh/suko_runpod
 
 # Inside pod
 cd /workspace
-git clone <YOUR_REPO_URL> img_pod
+git clone https://github.com/DarkOxygen123/img_pod img_pod
 cd img_pod
 bash deploy_shorts.sh
 
@@ -111,18 +117,19 @@ bash deploy_shorts.sh
 tail -f /tmp/shorts-worker-8006.log
 ```
 
-**Pod ID**: klu0524bz1nx1i  
+**Pod ID**: klu0524bz1nx1i
 **URL**: https://klu0524bz1nx1i-8006.proxy.runpod.net
 
 ---
 
 ### 7. Scenes Worker Pod (A40 - Port 8007)
+
 ```bash
 ssh root@103.196.86.192 -p 13042 -i ~/.ssh/suko_runpod
 
 # Inside pod
 cd /workspace
-git clone <YOUR_REPO_URL> img_pod
+git clone https://github.com/DarkOxygen123/img_pod img_pod
 cd img_pod
 bash deploy_scenes.sh
 
@@ -130,7 +137,7 @@ bash deploy_scenes.sh
 tail -f /tmp/scenes-worker-8007.log
 ```
 
-**Pod ID**: 5r1nfrz20lc715  
+**Pod ID**: 5r1nfrz20lc715
 **URL**: https://5r1nfrz20lc715-8007.proxy.runpod.net
 
 ---
@@ -175,7 +182,7 @@ bash deploy_<service>.sh  # e.g., deploy_interface.sh
 
 ## Troubleshooting
 
-**Pod won't start**: Check logs at `/tmp/<service>-<port>.log`  
-**Port already in use**: Deployment script auto-kills old process  
-**Model download stuck**: Check disk space with `df -h` (need 200GB+)  
+**Pod won't start**: Check logs at `/tmp/<service>-<port>.log`
+**Port already in use**: Deployment script auto-kills old process
+**Model download stuck**: Check disk space with `df -h` (need 200GB+)
 **Import errors**: Verify requirements installed with `pip list | grep transformers`
