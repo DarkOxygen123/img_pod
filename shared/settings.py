@@ -27,18 +27,18 @@ class InterfaceSettings(BaseSettings):
     scenes_sla_ms: int = 90_000
 
     # Default generation params (tune for speed/quality tradeoff).
-    # Target: ~6–10s warm latency on decent GPUs with good quality.
-    # 512x512 + 7 steps balances speed and quality (4 steps was too blurry).
+    # Target: ~8–12s warm latency on decent GPUs with good quality.
+    # 512x512 + 9 steps provides good quality without blur (7 was better but still slightly soft).
     # Recommended style: "3d_cartoon" for best results at this resolution.
     chat1to1_height: int = 512
     chat1to1_width: int = 512
-    chat1to1_num_inference_steps: int = 7
+    chat1to1_num_inference_steps: int = 9
     shorts_height: int = 512
     shorts_width: int = 512
-    shorts_num_inference_steps: int = 7
+    shorts_num_inference_steps: int = 9
     scenes_height: int = 512
     scenes_width: int = 512
-    scenes_num_inference_steps: int = 7
+    scenes_num_inference_steps: int = 9
     llm_service_url: HttpUrl = "https://abj0jt7cd4hgdy-8002.proxy.runpod.net"
     selfie_feature_worker_urls: List[HttpUrl] = ["https://97dsnjce4yxe96-8003.proxy.runpod.net"]
     profile_worker_urls: List[HttpUrl] = ["https://x690sjq9dtevw4-8003.proxy.runpod.net"]

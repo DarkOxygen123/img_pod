@@ -14,17 +14,17 @@ interface:
   chat1to1_sla_ms: 90000
   shorts_sla_ms: 90000
   scenes_sla_ms: 90000
-  # Speed/quality tuning (lower is faster, but <6 steps gets blurry)
-  # Recommended: 512x512 + 7 steps + "3d_cartoon" style for best quality/speed
+  # Speed/quality tuning (9 steps recommended for good quality at 512x512)
+  # Recommended: 512x512 + 9 steps + "3d_cartoon" style for best quality/speed
   chat1to1_height: 512
   chat1to1_width: 512
-  chat1to1_num_inference_steps: 7
+  chat1to1_num_inference_steps: 9
   shorts_height: 512
   shorts_width: 512
-  shorts_num_inference_steps: 7
+  shorts_num_inference_steps: 9
   scenes_height: 512
   scenes_width: 512
-  scenes_num_inference_steps: 7
+  scenes_num_inference_steps: 9
   llm_service_url: "https://abj0jt7cd4hgdy-8002.proxy.runpod.net"
   selfie_feature_worker_urls:
     - "https://97dsnjce4yxe96-8003.proxy.runpod.net"
