@@ -112,8 +112,23 @@ def _generate(system: str, user: str) -> str:
             pad_token_id=_tokenizer.eos_token_id,
         )
     decoded = _tokenizer.decode(out[0], skip_special_tokens=True)
-    # Return only assistant continuation roughly
-    return decoded
+    
+    # Extract only the assistant's response (after the last [/INST] marker for Mistral)
+    # Mistral format: <s>[INST] system + user [/INST] assistant_response</s>
+    if "[/INST]" in decoded:
+        response = decoded.split("[/INST]")[-1].strip()
+    else:
+        # Fallback: try to extract after system/user content
+        response = decoded
+    
+    logger.info("llm_generation_debug", extra={"extra_fields": {
+        "decoded_length": len(decoded),
+        "response_length": len(response),
+        "decoded_preview": decoded[:300],
+        "response_preview": response[:300]
+    }})
+    
+    return response
 
 
 def build_prompt_bundle(request: LlmBundleRequest) -> PromptBundle:
