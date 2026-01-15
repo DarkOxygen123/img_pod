@@ -271,6 +271,7 @@ async def expand_chat_context(request: LlmChat1to1ExpandRequest) -> LlmChat1to1E
                 "seconds": round(t_elapsed, 2),
                 "prompt_length": len(expanded_prompt),
                 "shortened": shortened_target is not None,
+                "FULL_EXPANDED_PROMPT": expanded_prompt,  # Log complete prompt for debugging
             }
         },
     )
@@ -406,6 +407,7 @@ async def expand_shorts_prompt(request: LlmShortsExpandRequest) -> LlmShortsExpa
                 "seconds": round(t_elapsed, 2),
                 "prompt_length": len(expanded_prompt),
                 "shortened": shortened_message is not None,
+                "FULL_EXPANDED_PROMPT": expanded_prompt,  # Log complete prompt for debugging
             }
         },
     )
@@ -496,6 +498,7 @@ async def expand_scenes_prompt(request: LlmScenesExpandRequest) -> LlmScenesExpa
                 "seconds": round(t_elapsed, 2),
                 "prompt_length": len(expanded_prompt),
                 "shortened": shortened_message is not None,
+                "FULL_EXPANDED_PROMPT": expanded_prompt,  # Log complete prompt for debugging
             }
         },
     )

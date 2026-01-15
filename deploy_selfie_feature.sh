@@ -11,21 +11,27 @@ echo "========================================="
 # Navigate to workspace
 cd /workspace/img_pod
 
+echo "[1/7] Clearing old logs and caches..."
+rm -f /tmp/selfie-*.log 2>/dev/null || true
+rm -rf /root/.cache/pip /root/.cache/torch 2>/dev/null || true
+find /workspace -type f -name '*.pyc' -delete 2>/dev/null || true
+find /workspace -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+
 # Pull latest code
-echo "[1/6] Pulling latest code..."
+echo "[2/7] Pulling latest code..."
 git pull
 
 # Install/update Python dependencies
-echo "[2/6] Installing dependencies..."
+echo "[3/7] Installing dependencies..."
 pip install --upgrade pip
 pip install -r services/selfie_feature_worker/requirements.txt
 
 # Download YOLOv8 model (if not exists)
-echo "[3/6] Downloading YOLOv8 model..."
+echo "[4/7] Downloading YOLOv8 model..."
 python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" || echo "YOLOv8 download initiated"
 
 # Kill existing service
-echo "[4/6] Stopping existing service..."
+echo "[5/7] Stopping existing service..."
 ps aux | grep "selfie_feature_worker.main:app" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || echo "No existing service found"
 sleep 2
 

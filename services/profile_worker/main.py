@@ -1,4 +1,5 @@
 import base64
+import gc
 import os
 import io
 import time
@@ -45,9 +46,6 @@ async def startup() -> None:
 
 def _profile_prompt(payload: dict) -> tuple[str, str]:
     """Build preset prompt from features dict for waist-level profile photo."""
-    # Log incoming payload for debugging
-    logger.info("prompt_payload_received", extra={"extra_fields": {"payload_keys": list(payload.keys())}})
-    
     # Unwrap avatar_features if nested
     features = payload.get("avatar_features", payload)
     observed = features.get("observed", {})
@@ -278,7 +276,6 @@ async def generate_from_features(avatar_features: dict = Body(...)) -> JSONRespo
     t_prompt0 = time.time()
     prompt, negative_prompt = _profile_prompt(avatar_features)
     t_prompt_s = time.time() - t_prompt0
-    logger.info("profile_prompt_generated", extra={"extra_fields": {"prompt": prompt}})
     
     # Pass negative_prompt when supported (helps prevent extra people/faces).
     t_infer0 = time.time()
@@ -314,4 +311,10 @@ async def generate_from_features(avatar_features: dict = Body(...)) -> JSONRespo
             }
         },
     )
+    
+    # Clear memory to prevent leaks
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+    
     return JSONResponse({"image_bytes_b64": base64.b64encode(image_bytes).decode()})

@@ -185,10 +185,6 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         new_w = max(1, int(w0 * scale))
         new_h = max(1, int(h0 * scale))
         vqa_bgr = cv2.resize(vqa_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
-        logger.info(
-            "vqa_image_resized",
-            extra={"extra_fields": {"original_size": f"{w0}x{h0}", "new_size": f"{new_w}x{new_h}"}},
-        )
 
     img_rgb = cv2.cvtColor(vqa_bgr, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(img_rgb)
@@ -648,16 +644,11 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
     # Resize large images for faster VQA processing
     max_dimension = 1024
     if max(h, w) > max_dimension:
-        orig_w, orig_h = w, h
         scale = max_dimension / max(h, w)
         new_w = int(w * scale)
         new_h = int(h * scale)
         img_bgr = cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
         h, w = new_h, new_w
-        logger.info(
-            "image_resized",
-            extra={"extra_fields": {"original_size": f"{orig_w}x{orig_h}", "new_size": f"{new_w}x{new_h}"}},
-        )
 
     # Face detection priority:
     # 1) MediaPipe (best for reducing false positives)
@@ -667,7 +658,6 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
     if not faces:
         faces = _detect_faces_yolo(img_bgr)
     if not faces:
-        logger.info("no_faces_mediapipe_or_yolo_trying_opencv")
         faces = _detect_faces_opencv_fallback(img_bgr)
     
     num_faces = len(faces)
@@ -692,7 +682,6 @@ def _extract_features_from_image(content: bytes) -> FaceProfileFeaturesV1:
         y2 = min(h, y + fh + pad_h)
         
         img_bgr_cropped = img_bgr[y1:y2, x1:x2]
-        logger.info("face_cropped", extra={"extra_fields": {"original": f"{w}x{h}", "cropped": f"{x2-x1}x{y2-y1}"}})
         quality_penalty = 1.0  # No penalty for single face
     else:
         # MULTIPLE FACES - pick largest face and warn

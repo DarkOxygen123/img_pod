@@ -1,4 +1,5 @@
 import base64
+import gc
 import io
 import os
 import time
@@ -101,7 +102,7 @@ async def generate_scenes_image(request: WorkerScenesRequest = Body(...)) -> JSO
                 "height": request.height,
                 "width": request.width,
                 "num_inference_steps": request.num_inference_steps,
-                "final_prompt": request.prompt[:500],  # Log first 500 chars of actual prompt
+                "FULL_INPUT_PROMPT": request.prompt,  # Log complete prompt for debugging
             }
         },
     )
@@ -157,5 +158,10 @@ async def generate_scenes_image(request: WorkerScenesRequest = Body(...)) -> JSO
             }
         },
     )
+    
+    # Clear memory to prevent leaks
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
     
     return JSONResponse({"image_bytes_b64": base64.b64encode(image_bytes).decode()})

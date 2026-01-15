@@ -10,18 +10,23 @@ echo "========================================="
 
 cd /workspace/img_pod
 
-echo "[1/5] Pulling latest code..."
+echo "[1/6] Clearing old logs and caches..."
+rm -f /tmp/interface-*.log 2>/dev/null || true
+find /workspace -type f -name '*.pyc' -delete 2>/dev/null || true
+find /workspace -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+
+echo "[2/6] Pulling latest code..."
 git pull
 
-echo "[2/5] Installing dependencies..."
+echo "[3/6] Installing dependencies..."
 pip install --upgrade pip
 pip install -r services/interface/requirements.txt
 
-echo "[3/5] Stopping existing service..."
+echo "[4/6] Stopping existing service..."
 ps aux | grep "interface.main:app" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || echo "No existing service found"
 sleep 2
 
-echo "[4/5] Starting interface on port 8000..."
+echo "[5/6] Starting interface on port 8000..."
 nohup python -m uvicorn services.interface.main:app \
     --host 0.0.0.0 \
     --port 8000 \
@@ -30,7 +35,7 @@ nohup python -m uvicorn services.interface.main:app \
 
 sleep 3
 
-echo "[5/5] Service logs:"
+echo "[6/6] Service logs:"
 tail -n 40 /tmp/interface-8000.log
 
 echo ""
