@@ -641,7 +641,7 @@ async def chat_1to1_imagegen(body: Chat1to1ImageGenRequest = Body(...)) -> JSONR
     expand_resp = await post_json(
         _llm_base_url() + "/v1/chat/1to1/expand",
         expand_payload,
-        timeout_s=15.0,
+        timeout_s=30.0,  # Increased for detailed style templates
     )
     if expand_resp.status_code >= 300:
         raise HTTPException(
@@ -773,7 +773,7 @@ async def chat_shorts_generate(body: ShortsImageGenRequest = Body(...)) -> JSONR
     expand_resp = await post_json(
         _llm_base_url() + "/v1/chat/shorts/expand",
         expand_payload,
-        timeout_s=15.0,
+        timeout_s=30.0,  # Increased for detailed style templates
     )
     if expand_resp.status_code >= 300:
         raise HTTPException(
@@ -905,7 +905,7 @@ async def chat_scenes_generate(body: ScenesImageGenRequest = Body(...)) -> JSONR
     expand_resp = await post_json(
         _llm_base_url() + "/v1/chat/scenes/expand",
         expand_payload,
-        timeout_s=15.0,
+        timeout_s=30.0,  # Increased for detailed style templates
     )
     if expand_resp.status_code >= 300:
         raise HTTPException(
