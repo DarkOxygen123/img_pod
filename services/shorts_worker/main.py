@@ -20,6 +20,8 @@ settings = config.shorts_worker_settings()
 
 MODEL_ID = os.getenv("SHORTS_MODEL_ID", "Tongyi-MAI/Z-Image-Turbo")
 DEVICE = os.getenv("SHORTS_DEVICE", "cuda")
+CPU_OFFLOAD = os.getenv("SHORTS_CPU_OFFLOAD", "0").strip().lower() in {"1", "true", "yes"}
+ATTN_SLICING = os.getenv("SHORTS_ATTN_SLICING", "0").strip().lower() in {"1", "true", "yes"}
 
 _pipe = None
 
@@ -31,15 +33,32 @@ async def startup() -> None:
     
     logger.info("loading_shorts_model", extra={"extra_fields": {"model_id": MODEL_ID}})
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+    if DEVICE.startswith("cuda") and torch.cuda.is_available():
+        try:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.cudnn.benchmark = True
+            torch.set_float32_matmul_precision("high")
+        except Exception:
+            pass
+
     _pipe = DiffusionPipeline.from_pretrained(MODEL_ID, torch_dtype=torch.bfloat16)
-    try:
-        _pipe.enable_attention_slicing()
-    except Exception:
-        pass
-    try:
-        _pipe.enable_model_cpu_offload()
-    except Exception:
+
+    if ATTN_SLICING:
+        try:
+            _pipe.enable_attention_slicing()
+        except Exception:
+            pass
+
+    if CPU_OFFLOAD:
+        try:
+            _pipe.enable_model_cpu_offload()
+        except Exception:
+            _pipe = _pipe.to(DEVICE)
+    else:
         _pipe = _pipe.to(DEVICE)
+
     _pipe.set_progress_bar_config(disable=True)
     logger.info("loaded_shorts_model", extra={"extra_fields": {"seconds": round(time.time() - t0, 2)}})
 
@@ -88,24 +107,25 @@ async def generate_shorts_image(request: WorkerShortsRequest = Body(...)) -> JSO
     # Generate image with provided prompt (NSFW moderated via LLM)
     t_infer0 = time.time()
     try:
-        try:
-            out = _pipe(
-                prompt=request.prompt,
-                negative_prompt=request.negative_prompt,
-                height=request.height,
-                width=request.width,
-                num_inference_steps=request.num_inference_steps,
-                guidance_scale=request.guidance_scale,
-            )
-        except TypeError:
-            # Fallback if negative_prompt not supported
-            out = _pipe(
-                prompt=request.prompt,
-                height=request.height,
-                width=request.width,
-                num_inference_steps=request.num_inference_steps,
-                guidance_scale=request.guidance_scale,
-            )
+        with torch.inference_mode():
+            try:
+                out = _pipe(
+                    prompt=request.prompt,
+                    negative_prompt=request.negative_prompt,
+                    height=request.height,
+                    width=request.width,
+                    num_inference_steps=request.num_inference_steps,
+                    guidance_scale=request.guidance_scale,
+                )
+            except TypeError:
+                # Fallback if negative_prompt not supported
+                out = _pipe(
+                    prompt=request.prompt,
+                    height=request.height,
+                    width=request.width,
+                    num_inference_steps=request.num_inference_steps,
+                    guidance_scale=request.guidance_scale,
+                )
     except Exception as e:
         logger.exception("shorts_generation_failed")
         raise HTTPException(

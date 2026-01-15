@@ -302,7 +302,27 @@ async def startup_event() -> None:
         "chat1to1_worker_urls": [str(u) for u in interface_settings.chat1to1_worker_urls],
         "shorts_worker_urls": [str(u) for u in interface_settings.shorts_worker_urls],
         "scenes_worker_urls": [str(u) for u in interface_settings.scenes_worker_urls],
-        "llm_service_url": str(interface_settings.llm_service_url)
+        "llm_service_url": str(interface_settings.llm_service_url),
+        "profile_sla_ms": interface_settings.profile_sla_ms,
+        "text2img_sla_ms": interface_settings.text2img_sla_ms,
+        "chat1to1_sla_ms": interface_settings.chat1to1_sla_ms,
+        "shorts_sla_ms": interface_settings.shorts_sla_ms,
+        "scenes_sla_ms": interface_settings.scenes_sla_ms,
+        "chat1to1_gen": {
+            "height": interface_settings.chat1to1_height,
+            "width": interface_settings.chat1to1_width,
+            "num_inference_steps": interface_settings.chat1to1_num_inference_steps,
+        },
+        "shorts_gen": {
+            "height": interface_settings.shorts_height,
+            "width": interface_settings.shorts_width,
+            "num_inference_steps": interface_settings.shorts_num_inference_steps,
+        },
+        "scenes_gen": {
+            "height": interface_settings.scenes_height,
+            "width": interface_settings.scenes_width,
+            "num_inference_steps": interface_settings.scenes_num_inference_steps,
+        },
     }})
     await profile_worker.start()
     await profile_generate_worker.start()
@@ -646,9 +666,9 @@ async def chat_1to1_imagegen(body: Chat1to1ImageGenRequest = Body(...)) -> JSONR
         "body": {
             "prompt": expanded_prompt,
             "negative_prompt": None,
-            "height": 1024,
-            "width": 1024,
-            "num_inference_steps": 9,
+            "height": interface_settings.chat1to1_height,
+            "width": interface_settings.chat1to1_width,
+            "num_inference_steps": interface_settings.chat1to1_num_inference_steps,
             "guidance_scale": 0.0,
         },
     }
@@ -777,9 +797,9 @@ async def chat_shorts_generate(body: ShortsImageGenRequest = Body(...)) -> JSONR
         "body": {
             "prompt": expanded_prompt,
             "negative_prompt": "nudity, explicit, nsfw, naked, nude",
-            "height": 1024,
-            "width": 1024,
-            "num_inference_steps": 9,
+            "height": interface_settings.shorts_height,
+            "width": interface_settings.shorts_width,
+            "num_inference_steps": interface_settings.shorts_num_inference_steps,
             "guidance_scale": 0.0,
         },
     }
@@ -908,9 +928,9 @@ async def chat_scenes_generate(body: ScenesImageGenRequest = Body(...)) -> JSONR
         "body": {
             "prompt": expanded_prompt,
             "negative_prompt": "nudity, explicit, nsfw, naked, nude",
-            "height": 1024,
-            "width": 1024,
-            "num_inference_steps": 9,
+            "height": interface_settings.scenes_height,
+            "width": interface_settings.scenes_width,
+            "num_inference_steps": interface_settings.scenes_num_inference_steps,
             "guidance_scale": 0.0,
         },
     }

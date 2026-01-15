@@ -20,9 +20,23 @@ class InterfaceSettings(BaseSettings):
     regen_attempts: int = 2
     profile_sla_ms: int = 90_000
     text2img_sla_ms: int = 8_000
-    chat1to1_sla_ms: int = 15_000
-    shorts_sla_ms: int = 15_000
-    scenes_sla_ms: int = 15_000
+    # Image generation can take tens of seconds on GPU. Keep below typical edge proxy
+    # timeouts by default, but allow tuning via env/config.
+    chat1to1_sla_ms: int = 90_000
+    shorts_sla_ms: int = 90_000
+    scenes_sla_ms: int = 90_000
+
+    # Default generation params (tune for speed/quality tradeoff).
+    # 768x768 + 6 steps is meaningfully faster than 1024x1024 + 9 steps.
+    chat1to1_height: int = 768
+    chat1to1_width: int = 768
+    chat1to1_num_inference_steps: int = 6
+    shorts_height: int = 768
+    shorts_width: int = 768
+    shorts_num_inference_steps: int = 6
+    scenes_height: int = 768
+    scenes_width: int = 768
+    scenes_num_inference_steps: int = 6
     llm_service_url: HttpUrl = "https://abj0jt7cd4hgdy-8002.proxy.runpod.net"
     selfie_feature_worker_urls: List[HttpUrl] = ["https://97dsnjce4yxe96-8003.proxy.runpod.net"]
     profile_worker_urls: List[HttpUrl] = ["https://x690sjq9dtevw4-8003.proxy.runpod.net"]
@@ -121,9 +135,25 @@ class AppConfig:
             "retry_after_cap_ms": "INTERFACE_RETRY_AFTER_CAP_MS",
             "profile_queue_max": "INTERFACE_PROFILE_QUEUE_MAX",
             "text2img_queue_max": "INTERFACE_TEXT2IMG_QUEUE_MAX",
+            "chat1to1_queue_max": "INTERFACE_CHAT1TO1_QUEUE_MAX",
+            "shorts_queue_max": "INTERFACE_SHORTS_QUEUE_MAX",
+            "scenes_queue_max": "INTERFACE_SCENES_QUEUE_MAX",
             "regen_attempts": "INTERFACE_REGEN_ATTEMPTS",
             "profile_sla_ms": "INTERFACE_PROFILE_SLA_MS",
             "text2img_sla_ms": "INTERFACE_TEXT2IMG_SLA_MS",
+            "chat1to1_sla_ms": "INTERFACE_CHAT1TO1_SLA_MS",
+            "shorts_sla_ms": "INTERFACE_SHORTS_SLA_MS",
+            "scenes_sla_ms": "INTERFACE_SCENES_SLA_MS",
+
+            "chat1to1_height": "INTERFACE_CHAT1TO1_HEIGHT",
+            "chat1to1_width": "INTERFACE_CHAT1TO1_WIDTH",
+            "chat1to1_num_inference_steps": "INTERFACE_CHAT1TO1_NUM_INFERENCE_STEPS",
+            "shorts_height": "INTERFACE_SHORTS_HEIGHT",
+            "shorts_width": "INTERFACE_SHORTS_WIDTH",
+            "shorts_num_inference_steps": "INTERFACE_SHORTS_NUM_INFERENCE_STEPS",
+            "scenes_height": "INTERFACE_SCENES_HEIGHT",
+            "scenes_width": "INTERFACE_SCENES_WIDTH",
+            "scenes_num_inference_steps": "INTERFACE_SCENES_NUM_INFERENCE_STEPS",
             "llm_service_url": "INTERFACE_LLM_SERVICE_URL",
             "profile_worker_url": "INTERFACE_PROFILE_WORKER_URL",
             # list handled separately
@@ -134,7 +164,30 @@ class AppConfig:
             if val is None:
                 continue
             # type-coerce simple ints
-            if field in {"port", "retry_after_cap_ms", "profile_queue_max", "text2img_queue_max", "regen_attempts", "profile_sla_ms", "text2img_sla_ms"}:
+            if field in {
+                "port",
+                "retry_after_cap_ms",
+                "profile_queue_max",
+                "text2img_queue_max",
+                "chat1to1_queue_max",
+                "shorts_queue_max",
+                "scenes_queue_max",
+                "regen_attempts",
+                "profile_sla_ms",
+                "text2img_sla_ms",
+                "chat1to1_sla_ms",
+                "shorts_sla_ms",
+                "scenes_sla_ms",
+                "chat1to1_height",
+                "chat1to1_width",
+                "chat1to1_num_inference_steps",
+                "shorts_height",
+                "shorts_width",
+                "shorts_num_inference_steps",
+                "scenes_height",
+                "scenes_width",
+                "scenes_num_inference_steps",
+            }:
                 data[field] = int(val)
             else:
                 data[field] = val

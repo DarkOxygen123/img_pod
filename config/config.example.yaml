@@ -5,13 +5,38 @@ interface:
   retry_after_cap_ms: 120000
   profile_queue_max: 10
   text2img_queue_max: 10
+  chat1to1_queue_max: 10
+  shorts_queue_max: 10
+  scenes_queue_max: 10
   regen_attempts: 2  # total attempts including first
-  profile_sla_ms: 10000
+  profile_sla_ms: 90000
   text2img_sla_ms: 8000
-  llm_service_url: "https://z8xu5cpyevi44q-8002.proxy.runpod.net"
-  profile_worker_url: "https://je5fxki9i9cekh-8003.proxy.runpod.net"
+  chat1to1_sla_ms: 90000
+  shorts_sla_ms: 90000
+  scenes_sla_ms: 90000
+  # Speed/quality tuning (lower is faster)
+  chat1to1_height: 768
+  chat1to1_width: 768
+  chat1to1_num_inference_steps: 6
+  shorts_height: 768
+  shorts_width: 768
+  shorts_num_inference_steps: 6
+  scenes_height: 768
+  scenes_width: 768
+  scenes_num_inference_steps: 6
+  llm_service_url: "https://abj0jt7cd4hgdy-8002.proxy.runpod.net"
+  selfie_feature_worker_urls:
+    - "https://97dsnjce4yxe96-8003.proxy.runpod.net"
+  profile_worker_urls:
+    - "https://x690sjq9dtevw4-8003.proxy.runpod.net"
   text2img_worker_urls:
     - "https://tx5t471v3aljjd-8004.proxy.runpod.net"
+  chat1to1_worker_urls:
+    - "https://6eubyihk4kt8l0-8005.proxy.runpod.net"
+  shorts_worker_urls:
+    - "https://klu0524bz1nx1i-8006.proxy.runpod.net"
+  scenes_worker_urls:
+    - "https://5r1nfrz20lc715-8007.proxy.runpod.net"
 llm_service:
   host: "0.0.0.0"
   port: 8002
