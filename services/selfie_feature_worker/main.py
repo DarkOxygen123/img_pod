@@ -247,18 +247,32 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
 
     def _batch_vqa(schema: dict) -> dict:
         """Ask for all fields in one VQA call, returning a validated features dict."""
-        # Build a compact instruction prompt.
+        # Build enhanced instruction with descriptive guidance
+        field_descriptions = {
+            "eye_shape": "Look carefully at the eye contour shape - almond (slightly elongated with tapered ends), round (circular/wide-open), hooded (upper eyelid fold covers part of eye), monolid (no visible crease), upturned (outer corners higher), downturned (outer corners lower)",
+            "face_shape": "Analyze overall face outline - oval (balanced length/width, gently rounded), round (circular, similar length/width), square (angular jawline, similar length/width), heart (wider forehead, pointed chin), diamond (wider cheekbones, narrow forehead/chin)",
+            "skin_undertone": "Observe vein color on neck/wrist area if visible - cool (blue/pink undertones), warm (yellow/golden undertones), neutral (balanced mix), olive (greenish undertones)",
+            "hair_type": "Examine hair strand pattern and curl - straight (no curl, flat), wavy (gentle S-curve), curly (defined spiral curls), coily (tight zig-zag curls)",
+            "hairline_type": "Focus on forehead hairline pattern - straight (horizontal line), rounded (smooth curved line), widow-peak (V-shaped dip in center), receding-mild (temples slightly back), receding-deep (temples significantly back)",
+            "facial_marks": "Check entire face for marks - none (clear skin), mole (dark spot/bump), freckles (multiple small brown spots), scar (healed wound line), acne (red bumps/blemishes)",
+        }
+        
         lines = [
-            "Return ONLY a JSON object.",
-            "Rules:",
-            "- Keys must exactly match the requested keys.",
-            "- Values must be one of the allowed options for that key, or null.",
-            "- Do not add extra keys.",
-            "- No explanation text.",
-            "Keys and allowed options:",
+            "Analyze this face portrait carefully and return ONLY a JSON object with facial features.",
+            "CRITICAL INSTRUCTIONS:",
+            "- Examine each feature systematically and choose the BEST matching option",
+            "- Keys must exactly match the requested keys",
+            "- Values must be one of the allowed options for that key, or null if uncertain",
+            "- Do not add extra keys or explanation text",
+            "",
+            "FEATURES TO EXTRACT:",
         ]
         for k, opts in schema.items():
-            lines.append(f"- {k}: {', '.join(opts)}")
+            if k in field_descriptions:
+                lines.append(f"- {k}: {field_descriptions[k]}")
+                lines.append(f"  Options: {', '.join(opts)}")
+            else:
+                lines.append(f"- {k}: {', '.join(opts)}")
         instruction = "\n".join(lines)
 
         messages = [
@@ -282,8 +296,8 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         ).to(DEVICE)
 
         with torch.inference_mode():
-            # Single generation for all fields.
-            output_ids = _vqa_model.generate(**inputs, max_new_tokens=160)
+            # Single generation for all fields - increased tokens for enhanced prompts
+            output_ids = _vqa_model.generate(**inputs, max_new_tokens=200)
 
         generated_ids = output_ids[0][len(inputs.input_ids[0]) :]
         raw = _vqa_processor.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
@@ -408,11 +422,11 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         )
         features["age_range"] = None
         features["skin_tone"] = _ask(
-            "What best describes the visible skin tone color? Choose only one: porcelain, fair, wheatish, light-brown, brown, dark-brown, deep",
+            "Look at the face and neck skin color. What BEST describes the visible skin tone? Choose only one: porcelain (very fair/pale), fair (light), wheatish (light tan/beige), light-brown, brown, dark-brown, deep (very dark)",
             ["porcelain", "fair", "wheatish", "light-brown", "brown", "dark-brown", "deep"],
         )
         features["eye_color"] = _ask(
-            "What is the eye color? Choose only one: brown, dark-brown, hazel, green, blue, gray",
+            "Look carefully at the iris color (the colored part around the pupil). What is the eye color? Choose the BEST match: brown, dark-brown, hazel, green, blue, gray",
             ["brown", "dark-brown", "hazel", "green", "blue", "gray"],
         )
         features["hair_color"] = _ask(
@@ -420,7 +434,7 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             ["black", "dark-brown", "brown", "light-brown", "blonde", "red", "gray", "white"],
         )
         features["hair_type"] = _ask(
-            "What is the hair texture? Choose only one: straight, wavy, curly, coily",
+            "Examine the hair strand pattern and texture. What is the hair type? straight (no curl, flat), wavy (gentle S-curve), curly (defined spirals), coily (tight zig-zag curls)",
             ["straight", "wavy", "curly", "coily"],
         )
         features["hair_length"] = _ask(
@@ -432,7 +446,7 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
             ["none", "stubble", "light-mustache", "mustache", "trimmed-beard", "full-beard"],
         )
         features["facial_marks"] = _ask(
-            "Are there visible facial marks? Choose only one: none, mole, freckles, scar",
+            "Check the entire face for visible marks. Are there facial marks? none (clear skin), mole (dark spot/raised bump), freckles (multiple small brown spots), scar (healed wound line), acne (red bumps/blemishes)",
             ["none", "mole", "freckles", "scar"],
         )
         features["dress_type"] = _ask(
