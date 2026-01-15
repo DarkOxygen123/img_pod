@@ -35,7 +35,7 @@ settings = config.llm_settings()
 MODEL_ID = os.getenv("LLM_MODEL_ID", "mistralai/Mistral-7B-Instruct-v0.3")
 DTYPE = os.getenv("LLM_TORCH_DTYPE", "bfloat16")
 DEVICE = os.getenv("LLM_DEVICE", "cuda")
-MAX_NEW_TOKENS = int(os.getenv("LLM_MAX_NEW_TOKENS", "512"))
+MAX_NEW_TOKENS = int(os.getenv("LLM_MAX_NEW_TOKENS", "1024"))  # Increased for detailed style templates
 
 _tokenizer = None
 _model = None
