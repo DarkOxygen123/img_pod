@@ -1,6 +1,13 @@
 -r requirements.interface.txt
 Pillow==10.3.0
-torch
+
+# RunPod base image is CUDA 12.4.1. We need a torch build that supports
+# scaled_dot_product_attention(enable_gqa=...), otherwise Z-Image Turbo fails.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.5.1+cu124
+torchvision==0.20.1+cu124
+torchaudio==2.5.1+cu124
+
 diffusers==0.36.0
 transformers==4.57.5
 accelerate==1.12.0
