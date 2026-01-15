@@ -100,6 +100,8 @@ async def generate_scenes_image(request: WorkerScenesRequest = Body(...)) -> JSO
                 "prompt_length": len(request.prompt),
                 "height": request.height,
                 "width": request.width,
+                "num_inference_steps": request.num_inference_steps,
+                "final_prompt": request.prompt[:500],  # Log first 500 chars of actual prompt
             }
         },
     )

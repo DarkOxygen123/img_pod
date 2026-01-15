@@ -244,7 +244,7 @@ def example_1to1_chat(alice_features: dict, bob_features: dict, charlie_features
                 "tagged_handles": [],
             },
         ],
-        "style": "realistic",  # anime, realistic, 3d_cartoon, oil_painting, watercolor
+        "style": "3d_cartoon",  # 3d_cartoon, anime, realistic, oil_painting, watercolor (3d_cartoon recommended for 512x512)
         "participants": [
             {
                 "handle": "alice",
@@ -304,7 +304,7 @@ def example_shorts(alice_features: dict):
     print("=" * 70)
 
     request_data = {
-        "style": "anime",
+        "style": "3d_cartoon",  # 3d_cartoon recommended for best quality at 512x512
         "participants": [
             {
                 "handle": "alice",
@@ -356,7 +356,7 @@ def example_scenes(alice_features: dict, bob_features: dict):
     print("=" * 70)
 
     request_data = {
-        "style": "3d_cartoon",
+        "style": "3d_cartoon",  # 3d_cartoon is optimal for 512x512 generation
         "participants": [
             {"handle": "alice", "avatar_features": alice_features},
             {"handle": "bob", "avatar_features": bob_features},
