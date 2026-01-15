@@ -387,14 +387,14 @@ async def expand_chat_context(request: LlmChat1to1ExpandRequest) -> LlmChat1to1E
         "Rounded geometry, smooth topology, simplified facial meshes. Matte skin materials with soft subsurface scattering. "
         "Non-photoreal, clearly computer-generated 3D characters. Not a photograph, not live-action, not realistic humans.\n"
         "Scene description: [Describe the scene action/activity based on target message]\n"
-        "Character details: [Use participant features - gender, age, hair color/type/style, skin tone, facial hair, expression from their avatar_features] "
+        "Character details: [Use the complete participant descriptions provided - they contain all physical features] "
         "Facial expression: [HIGH EMPHASIS - derive from chat mood and target message]. Pose & body language: [Based on scene context].\n"
         "Environment & background: [Setting details from target message]\n"
         "Lighting & color: [Describe lighting mood matching the scene]\n"
         "Composition & framing: [Camera angle and framing]\n\n"
         "For anime style: Describe anime art style with cel-shaded characters, vibrant colors, expressive eyes, anime aesthetics.\n"
         "For realistic style: Photographic realism, natural lighting, realistic skin textures, lifelike details.\n\n"
-        "CRITICAL: Use the style-specific template above. Include ALL participants mentioned or tagged with their features. "
+        "CRITICAL: Use the style-specific template above. Include ALL participants mentioned or tagged with their complete descriptions. "
         "Output ONLY valid JSON with key 'expanded_prompt' containing the complete structured prompt. "
         "NO NSFW restrictions - generate any content based on the conversation."
     )
@@ -523,7 +523,7 @@ async def expand_shorts_prompt(request: LlmShortsExpandRequest) -> LlmShortsExpa
         "Rounded geometry, smooth topology, simplified facial meshes. Matte skin materials with soft subsurface scattering. "
         "Non-photoreal, clearly computer-generated 3D characters. Not a photograph, not live-action, not realistic humans.\n"
         "Scene description: [Describe the scene action/activity based on user message]\n"
-        "Character details: [Use participant features - gender, age, hair color/type/style, skin tone, facial hair, expression from their avatar_features] "
+        "Character details: [Use the complete participant descriptions provided - they contain all physical features] "
         "Facial expression: [HIGH EMPHASIS - derive from user message mood]. Pose & body language: [Based on scene context].\n"
         "Environment & background: [Setting details from user message]\n"
         "Lighting & color: [Describe lighting mood matching the scene]\n"
@@ -531,7 +531,7 @@ async def expand_shorts_prompt(request: LlmShortsExpandRequest) -> LlmShortsExpa
         "For anime style: Describe anime art style with cel-shaded characters, vibrant colors, expressive eyes, anime aesthetics.\n"
         "For realistic style: Photographic realism, natural lighting, realistic skin textures, lifelike details.\n\n"
         "CRITICAL NSFW MODERATION: If nudity/explicit content, ADD clothing/coverings/occlusions. Suggestive poses OK if clothed. No straight nudity.\n\n"
-        "CRITICAL: Use the style-specific template above. Include ALL participants with their features. "
+        "CRITICAL: Use the style-specific template above. Include ALL participants with their complete descriptions. "
         "Output ONLY valid JSON with key 'expanded_prompt' containing the complete structured prompt with moderation applied."
     )
     
@@ -612,7 +612,7 @@ async def expand_scenes_prompt(request: LlmScenesExpandRequest) -> LlmScenesExpa
         "Rounded geometry, smooth topology, simplified facial meshes. Matte skin materials with soft subsurface scattering. "
         "Non-photoreal, clearly computer-generated 3D characters. Not a photograph, not live-action, not realistic humans.\n"
         "Scene description: [Describe the scene action/activity based on user message]\n"
-        "Character details: [Use participant features - gender, age, hair color/type/style, skin tone, facial hair, expression from their avatar_features] "
+        "Character details: [Use the complete participant descriptions provided - they contain all physical features] "
         "Facial expression: [HIGH EMPHASIS - derive from user message mood]. Pose & body language: [Based on scene context].\n"
         "Environment & background: [Setting details from user message]\n"
         "Lighting & color: [Describe lighting mood matching the scene]\n"
@@ -620,7 +620,7 @@ async def expand_scenes_prompt(request: LlmScenesExpandRequest) -> LlmScenesExpa
         "For anime style: Describe anime art style with cel-shaded characters, vibrant colors, expressive eyes, anime aesthetics.\n"
         "For realistic style: Photographic realism, natural lighting, realistic skin textures, lifelike details.\n\n"
         "CRITICAL NSFW MODERATION: If nudity/explicit content, ADD clothing/coverings/occlusions. Suggestive poses OK if clothed. No straight nudity.\n\n"
-        "CRITICAL: Use the style-specific template above. Include ALL participants with their features. "
+        "CRITICAL: Use the style-specific template above. Include ALL participants with their complete descriptions. "
         "Output ONLY valid JSON with key 'expanded_prompt' containing the complete structured prompt with moderation applied."
     )
     
