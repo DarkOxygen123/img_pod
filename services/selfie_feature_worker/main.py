@@ -249,8 +249,10 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         """Ask for all fields in one VQA call, returning a validated features dict."""
         # Build enhanced instruction with descriptive guidance
         field_descriptions = {
-            "eye_shape": "Look carefully at the eye contour shape - almond (slightly elongated with tapered ends), round (circular/wide-open), hooded (upper eyelid fold covers part of eye), monolid (no visible crease), upturned (outer corners higher), downturned (outer corners lower)",
-            "face_shape": "Analyze overall face outline - oval (balanced length/width, gently rounded), round (circular, similar length/width), square (angular jawline, similar length/width), heart (wider forehead, pointed chin), diamond (wider cheekbones, narrow forehead/chin)",
+            "eye_shape": "Look carefully at the eye contour shape - almond (slightly elongated with tapered ends), round (circular/wide-open), round-large (prominently round and large), hooded (upper eyelid fold covers part of eye), deep-set (eyes set deeper in socket), monolid (no visible crease), upturned (outer corners higher than inner), downturned (outer corners lower than inner), close-set (less space between eyes), wide-set (more space between eyes)",
+            "face_shape": "Analyze the overall face outline and proportions carefully - oval (balanced length/width, gently rounded), round (circular, similar length/width with soft curves), square (angular jawline, width equals length), rectangle_oblong (elongated rectangular with angular jaw), heart_inverted_triangle (wider forehead tapering to pointed chin), diamond (wider cheekbones, narrow forehead and chin), triangle_pear (wider jaw/lower face, narrow forehead), hexagon (angular with defined cheekbones), long_oval (elongated oval shape), round_oval (blend of round and oval features)",
+            "face_fullness": "Assess the facial volume and cheek fullness - very-slim (hollow/gaunt cheeks, prominent bone structure), slim (lean face, minimal fullness), average (balanced facial volume), full (fuller cheeks, rounded features), very-full (very full/chubby cheeks, rounded face)",
+            "jawline_definition": "Examine the jawline clarity and prominence - sharp (clearly defined angular jawline), moderate (visible but not extremely defined), soft (gentle/rounded jawline, less definition)",
             "skin_undertone": "Observe vein color on neck/wrist area if visible - cool (blue/pink undertones), warm (yellow/golden undertones), neutral (balanced mix), olive (greenish undertones)",
             "hair_type": "Examine hair strand pattern and curl - straight (no curl, flat), wavy (gentle S-curve), curly (defined spiral curls), coily (tight zig-zag curls)",
             "hairline_type": "Focus on forehead hairline pattern - straight (horizontal line), rounded (smooth curved line), widow-peak (V-shaped dip in center), receding-mild (temples slightly back), receding-deep (temples significantly back)",
@@ -327,8 +329,10 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         "skin_tone": ["porcelain", "fair", "wheatish", "light-brown", "brown", "dark-brown", "deep"],
         "skin_undertone": ["cool", "neutral", "warm", "olive"],
         "eye_color": ["brown", "dark-brown", "hazel", "green", "blue", "gray"],
-        "eye_shape": ["almond", "round", "hooded", "monolid", "upturned", "downturned"],
-        "face_shape": ["oval", "round", "square", "heart", "diamond"],
+        "eye_shape": ["almond", "round", "round-large", "hooded", "deep-set", "monolid", "upturned", "downturned", "close-set", "wide-set"],
+        "face_shape": ["oval", "round", "square", "rectangle_oblong", "heart_inverted_triangle", "diamond", "triangle_pear", "hexagon", "long_oval", "round_oval"],
+        "face_fullness": ["very-slim", "slim", "average", "full", "very-full"],
+        "jawline_definition": ["sharp", "moderate", "soft"],
         "hair_color": ["black", "dark-brown", "brown", "light-brown", "blonde", "red", "gray", "white"],
         "hair_type": ["straight", "wavy", "curly", "coily"],
         "hair_length": ["bald", "very-short", "short", "medium", "long"],
