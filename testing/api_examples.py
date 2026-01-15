@@ -267,7 +267,7 @@ def example_1to1_chat(alice_features: dict, bob_features: dict, charlie_features
     response = requests.post(
         f"{BASE_URL}/v1/chat/1to1/imagegen",
         json=request_data,
-        timeout=30,  # ~15 seconds expected
+        timeout=180,  # can take longer on cold starts / busy pods
     )
 
     if response.status_code == 200:
@@ -319,7 +319,7 @@ def example_shorts(alice_features: dict):
     print(f"   Message: {request_data['user_message']}")
 
     response = requests.post(
-        f"{BASE_URL}/v1/chat/shorts/generate", json=request_data, timeout=30
+        f"{BASE_URL}/v1/chat/shorts/generate", json=request_data, timeout=180
     )
 
     if response.status_code == 200:
@@ -370,7 +370,7 @@ def example_scenes(alice_features: dict, bob_features: dict):
     print(f"   Message: {request_data['user_message']}")
 
     response = requests.post(
-        f"{BASE_URL}/v1/chat/scenes/generate", json=request_data, timeout=30
+        f"{BASE_URL}/v1/chat/scenes/generate", json=request_data, timeout=180
     )
 
     if response.status_code == 200:

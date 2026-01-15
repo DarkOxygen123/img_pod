@@ -197,13 +197,22 @@ async def chat1to1_worker_handler(item: QueueItem) -> None:
     """Queue handler for 1:1 chat image generation."""
     worker_url = item.payload["worker_url"]
     resp = await post_json(
-        str(worker_url) + "/v1/chat/1to1/generate",
+        str(worker_url).rstrip("/") + "/v1/chat/1to1/generate",
         item.payload["body"],
         timeout_s=interface_settings.chat1to1_sla_ms / 1000,
     )
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
-    image_bytes = resp.content
+    # Workers return JSON {"image_bytes_b64": "..."}; convert to raw PNG bytes.
+    content_type = resp.headers.get("content-type", "")
+    if "application/json" in content_type:
+        data = resp.json()
+        if "image_bytes_b64" in data:
+            image_bytes = base64.b64decode(data["image_bytes_b64"])
+        else:
+            raise HTTPException(status_code=502, detail=f"Worker JSON missing image_bytes_b64: {data}")
+    else:
+        image_bytes = resp.content
     item.future.set_result(image_bytes)
 
 
@@ -211,13 +220,21 @@ async def shorts_worker_handler(item: QueueItem) -> None:
     """Queue handler for shorts image generation."""
     worker_url = item.payload["worker_url"]
     resp = await post_json(
-        str(worker_url) + "/v1/chat/shorts/generate",
+        str(worker_url).rstrip("/") + "/v1/chat/shorts/generate",
         item.payload["body"],
         timeout_s=interface_settings.shorts_sla_ms / 1000,
     )
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
-    image_bytes = resp.content
+    content_type = resp.headers.get("content-type", "")
+    if "application/json" in content_type:
+        data = resp.json()
+        if "image_bytes_b64" in data:
+            image_bytes = base64.b64decode(data["image_bytes_b64"])
+        else:
+            raise HTTPException(status_code=502, detail=f"Worker JSON missing image_bytes_b64: {data}")
+    else:
+        image_bytes = resp.content
     item.future.set_result(image_bytes)
 
 
@@ -225,13 +242,21 @@ async def scenes_worker_handler(item: QueueItem) -> None:
     """Queue handler for scenes image generation."""
     worker_url = item.payload["worker_url"]
     resp = await post_json(
-        str(worker_url) + "/v1/chat/scenes/generate",
+        str(worker_url).rstrip("/") + "/v1/chat/scenes/generate",
         item.payload["body"],
         timeout_s=interface_settings.scenes_sla_ms / 1000,
     )
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.content.decode(errors="replace"))
-    image_bytes = resp.content
+    content_type = resp.headers.get("content-type", "")
+    if "application/json" in content_type:
+        data = resp.json()
+        if "image_bytes_b64" in data:
+            image_bytes = base64.b64decode(data["image_bytes_b64"])
+        else:
+            raise HTTPException(status_code=502, detail=f"Worker JSON missing image_bytes_b64: {data}")
+    else:
+        image_bytes = resp.content
     item.future.set_result(image_bytes)
 
 
