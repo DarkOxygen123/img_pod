@@ -101,9 +101,18 @@ def _generate(system: str, user: str) -> str:
         {"role": "user", "content": user}
     ]
     prompt = _tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    
+    logger.info("llm_prompt_template", extra={"extra_fields": {
+        "prompt_length": len(prompt),
+        "prompt_preview": prompt[-300:]  # Last 300 chars to see the generation prompt marker
+    }})
+    
     inputs = _tokenizer(prompt, return_tensors="pt")
     if DEVICE == "cuda":
         inputs = {k: v.to(_model.device) for k, v in inputs.items()}
+    
+    input_length = inputs['input_ids'].shape[1]
+    
     with torch.no_grad():
         out = _model.generate(
             **inputs,
@@ -111,21 +120,17 @@ def _generate(system: str, user: str) -> str:
             do_sample=False,
             pad_token_id=_tokenizer.eos_token_id,
         )
-    decoded = _tokenizer.decode(out[0], skip_special_tokens=True)
     
-    # Extract only the assistant's response (after the last [/INST] marker for Mistral)
-    # Mistral format: <s>[INST] system + user [/INST] assistant_response</s>
-    if "[/INST]" in decoded:
-        response = decoded.split("[/INST]")[-1].strip()
-    else:
-        # Fallback: try to extract after system/user content
-        response = decoded
+    # Decode only the generated tokens (exclude the input prompt)
+    generated_ids = out[0][input_length:]
+    response = _tokenizer.decode(generated_ids, skip_special_tokens=True)
     
     logger.info("llm_generation_debug", extra={"extra_fields": {
-        "decoded_length": len(decoded),
+        "input_length": input_length,
+        "output_length": out[0].shape[0],
+        "generated_tokens": generated_ids.shape[0],
         "response_length": len(response),
-        "decoded_preview": decoded[:300],
-        "response_preview": response[:300]
+        "response_preview": response[:500]
     }})
     
     return response
