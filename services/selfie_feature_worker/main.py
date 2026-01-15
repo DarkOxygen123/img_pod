@@ -177,7 +177,7 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
     t_start = time.time()
     # VQA is the slowest step; downscale the crop further for speed.
     # This is separate from the earlier 1024px cap used for face detection.
-    vqa_max_dim = int(os.getenv("VQA_MAX_DIM", "768"))
+    vqa_max_dim = int(os.getenv("VQA_MAX_DIM", "1024"))  # Increased from 768 for better accuracy
     vqa_bgr = img_bgr
     h0, w0 = vqa_bgr.shape[:2]
     if max(h0, w0) > vqa_max_dim and vqa_max_dim >= 256:
@@ -249,10 +249,10 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         """Ask for all fields in one VQA call, returning a validated features dict."""
         # Build enhanced instruction with descriptive guidance
         field_descriptions = {
-            "eye_shape": "Look carefully at the eye contour shape - almond (slightly elongated with tapered ends), round (circular/wide-open), round-large (prominently round and large), hooded (upper eyelid fold covers part of eye), deep-set (eyes set deeper in socket), monolid (no visible crease), upturned (outer corners higher than inner), downturned (outer corners lower than inner), close-set (less space between eyes), wide-set (more space between eyes)",
+            "eye_shape": "CRITICAL - Look at the eye opening width and shape carefully. almond (elongated, tapered ends, classic almond nut shape), narrow-almond (slim elongated shape, sharp tapered ends), round (circular/wide-open, large iris visible), round-large (prominently round and large), hooded (heavy upper eyelid fold covering crease), deep-set (eyes recessed into socket), monolid (flat eyelid, no visible crease line), upturned (outer corner higher, cat-eye effect), downturned (outer corner lower, droopy appearance), close-set (small space between eyes), wide-set (large space between eyes). For sharp/narrow eyes choose narrow-almond",
             "face_shape": "Analyze the overall face outline and proportions carefully - oval (balanced length/width, gently rounded), round (circular, similar length/width with soft curves), square (angular jawline, width equals length), rectangle_oblong (elongated rectangular with angular jaw), heart_inverted_triangle (wider forehead tapering to pointed chin), diamond (wider cheekbones, narrow forehead and chin), triangle_pear (wider jaw/lower face, narrow forehead), hexagon (angular with defined cheekbones), long_oval (elongated oval shape), round_oval (blend of round and oval features)",
-            "face_fullness": "Assess the facial volume and cheek fullness - very-slim (hollow/gaunt cheeks, prominent bone structure), slim (lean face, minimal fullness), average (balanced facial volume), full (fuller cheeks, rounded features), very-full (very full/chubby cheeks, rounded face)",
-            "jawline_definition": "Examine the jawline clarity and prominence - sharp (clearly defined angular jawline), moderate (visible but not extremely defined), soft (gentle/rounded jawline, less definition)",
+            "face_fullness": "CRITICAL - Assess the cheek and facial volume. Look at cheek prominence and facial padding. very-slim (hollow/sunken cheeks, visible bone structure), slim (lean face, minimal cheek fullness), average (balanced facial volume, normal cheeks), full (fuller/plump cheeks, rounded features), very-full (very full/chubby cheeks, very rounded face)",
+            "jawline_definition": "CRITICAL - Examine how clearly the jawline is visible and how angular it appears. sharp (clearly defined angular jawline, prominent jaw edge), moderate (visible jawline but not extremely defined, balanced), soft (gentle/rounded jawline, less definition, smooth transition)",
             "skin_undertone": "Observe vein color on neck/wrist area if visible - cool (blue/pink undertones), warm (yellow/golden undertones), neutral (balanced mix), olive (greenish undertones)",
             "hair_type": "Examine hair strand pattern and curl - straight (no curl, flat), wavy (gentle S-curve), curly (defined spiral curls), coily (tight zig-zag curls)",
             "hairline_type": "Focus on forehead hairline pattern - straight (horizontal line), rounded (smooth curved line), widow-peak (V-shaped dip in center), receding-mild (temples slightly back), receding-deep (temples significantly back)",
@@ -299,7 +299,7 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
 
         with torch.inference_mode():
             # Single generation for all fields - increased tokens for enhanced prompts
-            output_ids = _vqa_model.generate(**inputs, max_new_tokens=200)
+            output_ids = _vqa_model.generate(**inputs, max_new_tokens=256)  # Increased for better accuracy
 
         generated_ids = output_ids[0][len(inputs.input_ids[0]) :]
         raw = _vqa_processor.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
@@ -329,7 +329,7 @@ def _extract_facial_features_with_vqa(img_bgr: np.ndarray) -> FaceObserved:
         "skin_tone": ["porcelain", "fair", "wheatish", "light-brown", "brown", "dark-brown", "deep"],
         "skin_undertone": ["cool", "neutral", "warm", "olive"],
         "eye_color": ["brown", "dark-brown", "hazel", "green", "blue", "gray"],
-        "eye_shape": ["almond", "round", "round-large", "hooded", "deep-set", "monolid", "upturned", "downturned", "close-set", "wide-set"],
+        "eye_shape": ["almond", "narrow-almond", "round", "round-large", "hooded", "deep-set", "monolid", "upturned", "downturned", "close-set", "wide-set"],
         "face_shape": ["oval", "round", "square", "rectangle_oblong", "heart_inverted_triangle", "diamond", "triangle_pear", "hexagon", "long_oval", "round_oval"],
         "face_fullness": ["very-slim", "slim", "average", "full", "very-full"],
         "jawline_definition": ["sharp", "moderate", "soft"],
