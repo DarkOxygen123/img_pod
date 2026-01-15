@@ -389,13 +389,16 @@ async def expand_chat_context(request: LlmChat1to1ExpandRequest) -> LlmChat1to1E
         "Non-photoreal CG characters. NOT clay models, NOT low-poly, NOT oversimplified.\n"
         "Scene description: [Describe the scene action/activity based on target message]\n"
         "Character details: [Use the complete participant descriptions provided - they contain all physical features] "
+        "Clothing & attire: [Specify appropriate clothing based on scene context - casual/formal/athletic/etc. Match the setting and activity]. "
         "Facial expression: [HIGH EMPHASIS - derive from chat mood and target message]. Pose & body language: [Based on scene context].\n"
         "Environment & background: [Setting details from target message]\n"
         "Lighting & color: [Describe lighting mood matching the scene]\n"
-        "Composition & framing: [Camera angle and framing]\n\n"
+        "Composition & framing: [Camera angle and framing. CRITICAL: Characters should fill 60-70% of frame height - proper adult proportions, "
+        "NOT tiny/child-sized figures. Medium shot or closer framing. Characters are the main focus, clearly visible with defined features].\n\n"
         "For anime style: Describe anime art style with cel-shaded characters, vibrant colors, expressive eyes, anime aesthetics.\n"
         "For realistic style: Photographic realism, natural lighting, realistic skin textures, lifelike details.\n\n"
         "CRITICAL: Use the style-specific template above. Include ALL participants mentioned or tagged with their complete descriptions. "
+        "Characters must be properly sized - NOT miniature/child-like scale. "
         "Output ONLY valid JSON with key 'expanded_prompt' containing the complete structured prompt. "
         "NO NSFW restrictions - generate any content based on the conversation."
     )
@@ -420,8 +423,9 @@ async def expand_chat_context(request: LlmChat1to1ExpandRequest) -> LlmChat1to1E
             expanded_prompt = obj.get("expanded_prompt", "")
     except Exception as e:
         logger.error("failed_to_parse_llm_json", extra={"extra_fields": {"error": str(e), "raw": raw[:200]}})
-        # Fallback: basic concatenation
-        expanded_prompt = f"Style: {request.style}. Scene: {request.target_message}. Participants: {', '.join([p.handle for p in request.participants])}."
+        # Fallback: basic concatenation using handle names from participants_info strings
+        participant_names = ", ".join([p.handle for p in request.participants])
+        expanded_prompt = f"Style: {request.style}. Scene: {request.target_message}. Participants: {participant_names}."
     
     # Shorten target message if >25 words
     target_words = request.target_message.split()
@@ -526,14 +530,17 @@ async def expand_shorts_prompt(request: LlmShortsExpandRequest) -> LlmShortsExpa
         "Non-photoreal CG characters. NOT clay models, NOT low-poly, NOT oversimplified.\n"
         "Scene description: [Describe the scene action/activity based on user message]\n"
         "Character details: [Use the complete participant descriptions provided - they contain all physical features] "
+        "Clothing & attire: [Specify appropriate clothing based on scene context - casual/formal/athletic/streetwear/etc. Match the setting and activity]. "
         "Facial expression: [HIGH EMPHASIS - derive from user message mood]. Pose & body language: [Based on scene context].\n"
         "Environment & background: [Setting details from user message]\n"
         "Lighting & color: [Describe lighting mood matching the scene]\n"
-        "Composition & framing: [Camera angle and framing]\n\n"
+        "Composition & framing: [Camera angle and framing. CRITICAL: Character should fill 60-70% of frame height - proper adult proportions, "
+        "NOT tiny/child-sized figure. Medium shot or closer framing. Character is the main focus, clearly visible with defined features].\n\n"
         "For anime style: Describe anime art style with cel-shaded characters, vibrant colors, expressive eyes, anime aesthetics.\n"
         "For realistic style: Photographic realism, natural lighting, realistic skin textures, lifelike details.\n\n"
         "CRITICAL NSFW MODERATION: If nudity/explicit content, ADD clothing/coverings/occlusions. Suggestive poses OK if clothed. No straight nudity.\n\n"
         "CRITICAL: Use the style-specific template above. Include ALL participants with their complete descriptions. "
+        "Character must be properly sized - NOT miniature/child-like scale. "
         "Output ONLY valid JSON with key 'expanded_prompt' containing the complete structured prompt with moderation applied."
     )
     
@@ -616,14 +623,17 @@ async def expand_scenes_prompt(request: LlmScenesExpandRequest) -> LlmScenesExpa
         "Non-photoreal CG characters. NOT clay models, NOT low-poly, NOT oversimplified.\n"
         "Scene description: [Describe the scene action/activity based on user message]\n"
         "Character details: [Use the complete participant descriptions provided - they contain all physical features] "
+        "Clothing & attire: [Specify appropriate clothing for each character based on scene context - casual/formal/athletic/etc. Match the setting and activity]. "
         "Facial expression: [HIGH EMPHASIS - derive from user message mood]. Pose & body language: [Based on scene context].\n"
         "Environment & background: [Setting details from user message]\n"
         "Lighting & color: [Describe lighting mood matching the scene]\n"
-        "Composition & framing: [Camera angle and framing]\n\n"
+        "Composition & framing: [Camera angle and framing. CRITICAL: Characters should fill 60-70% of frame height - proper adult proportions, "
+        "NOT tiny/child-sized figures. Medium shot or closer framing. Characters are the main focus, clearly visible with defined features].\n\n"
         "For anime style: Describe anime art style with cel-shaded characters, vibrant colors, expressive eyes, anime aesthetics.\n"
         "For realistic style: Photographic realism, natural lighting, realistic skin textures, lifelike details.\n\n"
         "CRITICAL NSFW MODERATION: If nudity/explicit content, ADD clothing/coverings/occlusions. Suggestive poses OK if clothed. No straight nudity.\n\n"
         "CRITICAL: Use the style-specific template above. Include ALL participants with their complete descriptions. "
+        "Characters must be properly sized - NOT miniature/child-like scale. "
         "Output ONLY valid JSON with key 'expanded_prompt' containing the complete structured prompt with moderation applied."
     )
     

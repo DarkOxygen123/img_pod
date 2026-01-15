@@ -208,78 +208,254 @@ def example_profile_update():
 # ============================================================================
 
 
-def example_1to1_chat(alice_features: dict, bob_features: dict, charlie_features: dict):
+def example_1to1_chat_scenario_1(alice_features: dict, bob_features: dict):
     """
-    Generate contextual image based on 1:1 chat conversation.
-
-    - NO NSFW restrictions
-    - Captions in 1st/2nd person ("us", "we", "our")
-    - tagged_handles for people NOT in chat (referenced friends)
-    - Include avatar_features for all tagged people - LLM decides if they appear in image
+    Scenario 1: Romantic dinner conversation.
+    Tests: Romantic/intimate context, dining setting, mood interpretation.
     """
     print("\n" + "=" * 70)
-    print("3. 1:1 CHAT IMAGE GENERATION")
+    print("3A. 1:1 CHAT - Romantic Dinner Date")
     print("=" * 70)
 
     request_data = {
         "chat_messages": [
             {
                 "sender_handle": "alice",
-                "text": "Remember that sunset at the beach?",
-                "timestamp": "2026-01-14T18:00:00Z",
-                "tagged_handles": [],  # No one mentioned
+                "text": "This restaurant is absolutely beautiful! The candlelight makes everything so romantic",
+                "timestamp": "2026-01-14T19:30:00Z",
+                "tagged_handles": [],
             },
             {
                 "sender_handle": "bob",
-                "text": "How could I forget? That was magical with @charlie's guitar playing",
-                "timestamp": "2026-01-14T18:01:30Z",
-                "tagged_handles": [
-                    "charlie"
-                ],  # Charlie is NOT in this chat, just mentioned
+                "text": "Not as beautiful as you tonight. I'm so glad we finally did this",
+                "timestamp": "2026-01-14T19:31:15Z",
+                "tagged_handles": [],
             },
             {
                 "sender_handle": "alice",
-                "text": "Let's imagine us back there, walking hand in hand along the shore",
-                "timestamp": "2026-01-14T18:03:00Z",
+                "text": "Should we make a toast? To new beginnings and unforgettable moments together",
+                "timestamp": "2026-01-14T19:32:30Z",
                 "tagged_handles": [],
             },
         ],
-        "style": "3d_cartoon",  # 3d_cartoon, anime, realistic, oil_painting, watercolor (3d_cartoon recommended for 512x512)
+        "style": "3d_cartoon",
         "participants": [
-            {
-                "handle": "alice",
-                "avatar_features": alice_features,  # Full features from profile creation
-            },
+            {"handle": "alice", "avatar_features": alice_features},
             {"handle": "bob", "avatar_features": bob_features},
-            {
-                "handle": "charlie",
-                "avatar_features": charlie_features,  # Tagged in message - LLM decides if he appears
-            },
         ],
-        "target_message": "Let's imagine us back there, walking hand in hand along the shore",
+        "target_message": "Should we make a toast? To new beginnings and unforgettable moments together",
     }
 
-    print("📤 Generating 1:1 chat image...")
-    print(f"   Style: {request_data['style']}")
-    print(f"   Participants: {len(request_data['participants'])}")
-    print(f"   Chat history: {len(request_data['chat_messages'])} messages")
+    print("📤 Generating romantic dinner scene...")
+    print(f"   Context: Intimate candlelit dinner")
 
     response = requests.post(
         f"{BASE_URL}/v1/chat/1to1/imagegen",
         json=request_data,
-        timeout=180,  # can take longer on cold starts / busy pods
+        timeout=180,
     )
 
     if response.status_code == 200:
         result = response.json()
         print("✅ Image generated successfully!")
         print(f"   Caption: {result['caption']}")
-        print(f"   Prompt used: {result['prompt_used']}")
+        save_image(result["image_base64"], "1to1_romantic_dinner.png")
+        save_json(result, "1to1_romantic_dinner.json")
+        return result
+    else:
+        print(f"❌ Error {response.status_code}: {response.text}")
+        return None
 
-        # Save image and metadata
-        save_image(result["image_base64"], "1to1_chat_image.png")
-        save_json(result, "1to1_chat_response.json")
 
+def example_1to1_chat_scenario_2(alice_features: dict, bob_features: dict):
+    """
+    Scenario 2: Adventure/excitement conversation.
+    Tests: Action context, outdoor setting, energetic mood.
+    """
+    print("\n" + "=" * 70)
+    print("3B. 1:1 CHAT - Adventure Hiking Trip")
+    print("=" * 70)
+
+    request_data = {
+        "chat_messages": [
+            {
+                "sender_handle": "bob",
+                "text": "This trail is getting intense! My legs are burning but the view is incredible",
+                "timestamp": "2026-01-14T14:20:00Z",
+                "tagged_handles": [],
+            },
+            {
+                "sender_handle": "alice",
+                "text": "Come on! We're almost at the summit. I can see the waterfall from here!",
+                "timestamp": "2026-01-14T14:22:45Z",
+                "tagged_handles": [],
+            },
+            {
+                "sender_handle": "bob",
+                "text": "Race you to the top! Loser buys lunch when we get back down",
+                "timestamp": "2026-01-14T14:23:30Z",
+                "tagged_handles": [],
+            },
+            {
+                "sender_handle": "alice",
+                "text": "You're on! Let's sprint through these last rocks together and celebrate at the peak!",
+                "timestamp": "2026-01-14T14:24:00Z",
+                "tagged_handles": [],
+            },
+        ],
+        "style": "3d_cartoon",
+        "participants": [
+            {"handle": "alice", "avatar_features": alice_features},
+            {"handle": "bob", "avatar_features": bob_features},
+        ],
+        "target_message": "You're on! Let's sprint through these last rocks together and celebrate at the peak!",
+    }
+
+    print("📤 Generating adventure hiking scene...")
+    print(f"   Context: Energetic outdoor adventure")
+
+    response = requests.post(
+        f"{BASE_URL}/v1/chat/1to1/imagegen",
+        json=request_data,
+        timeout=180,
+    )
+
+    if response.status_code == 200:
+        result = response.json()
+        print("✅ Image generated successfully!")
+        print(f"   Caption: {result['caption']}")
+        save_image(result["image_base64"], "1to1_adventure_hiking.png")
+        save_json(result, "1to1_adventure_hiking.json")
+        return result
+    else:
+        print(f"❌ Error {response.status_code}: {response.text}")
+        return None
+
+
+def example_1to1_chat_scenario_3(
+    alice_features: dict, bob_features: dict, charlie_features: dict
+):
+    """
+    Scenario 3: Cozy relaxation with friend mention.
+    Tests: Relaxed mood, indoor setting, tagged person reference.
+    """
+    print("\n" + "=" * 70)
+    print("3C. 1:1 CHAT - Cozy Movie Night (with friend mention)")
+    print("=" * 70)
+
+    request_data = {
+        "chat_messages": [
+            {
+                "sender_handle": "alice",
+                "text": "Perfect night for staying in. Got the blankets, popcorn, and your favorite snacks ready",
+                "timestamp": "2026-01-14T20:15:00Z",
+                "tagged_handles": [],
+            },
+            {
+                "sender_handle": "bob",
+                "text": "@charlie recommended this movie last week. Said it's hilarious and we'd love it",
+                "timestamp": "2026-01-14T20:16:30Z",
+                "tagged_handles": ["charlie"],
+            },
+            {
+                "sender_handle": "alice",
+                "text": "Come sit next to me and let's start it. These cozy nights with you are my favorite",
+                "timestamp": "2026-01-14T20:18:00Z",
+                "tagged_handles": [],
+            },
+        ],
+        "style": "3d_cartoon",
+        "participants": [
+            {"handle": "alice", "avatar_features": alice_features},
+            {"handle": "bob", "avatar_features": bob_features},
+            {
+                "handle": "charlie",
+                "avatar_features": charlie_features,
+            },  # Tagged but not in scene
+        ],
+        "target_message": "Come sit next to me and let's start it. These cozy nights with you are my favorite",
+    }
+
+    print("📤 Generating cozy movie night scene...")
+    print(f"   Context: Relaxed indoor intimacy (Charlie mentioned but not present)")
+
+    response = requests.post(
+        f"{BASE_URL}/v1/chat/1to1/imagegen",
+        json=request_data,
+        timeout=180,
+    )
+
+    if response.status_code == 200:
+        result = response.json()
+        print("✅ Image generated successfully!")
+        print(f"   Caption: {result['caption']}")
+        save_image(result["image_base64"], "1to1_cozy_movie_night.png")
+        save_json(result, "1to1_cozy_movie_night.json")
+        return result
+    else:
+        print(f"❌ Error {response.status_code}: {response.text}")
+        return None
+
+
+def example_1to1_chat_scenario_4(alice_features: dict, bob_features: dict):
+    """
+    Scenario 4: Playful/fun gaming context.
+    Tests: Competitive playful mood, modern gaming setting, expressive emotions.
+    """
+    print("\n" + "=" * 70)
+    print("3D. 1:1 CHAT - Competitive Gaming Session")
+    print("=" * 70)
+
+    request_data = {
+        "chat_messages": [
+            {
+                "sender_handle": "bob",
+                "text": "No way! How did you just beat my high score?? I've been practicing all week!",
+                "timestamp": "2026-01-14T22:10:00Z",
+                "tagged_handles": [],
+            },
+            {
+                "sender_handle": "alice",
+                "text": "Haha! Told you I'm the champion! Your face right now is priceless 😂",
+                "timestamp": "2026-01-14T22:11:20Z",
+                "tagged_handles": [],
+            },
+            {
+                "sender_handle": "bob",
+                "text": "Alright alright, one more round! Winner gets bragging rights forever",
+                "timestamp": "2026-01-14T22:12:00Z",
+                "tagged_handles": [],
+            },
+            {
+                "sender_handle": "alice",
+                "text": "You're on! Let's do this, game face activated! Bring it!",
+                "timestamp": "2026-01-14T22:12:45Z",
+                "tagged_handles": [],
+            },
+        ],
+        "style": "3d_cartoon",
+        "participants": [
+            {"handle": "alice", "avatar_features": alice_features},
+            {"handle": "bob", "avatar_features": bob_features},
+        ],
+        "target_message": "You're on! Let's do this, game face activated! Bring it!",
+    }
+
+    print("📤 Generating competitive gaming scene...")
+    print(f"   Context: Playful competition and excitement")
+
+    response = requests.post(
+        f"{BASE_URL}/v1/chat/1to1/imagegen",
+        json=request_data,
+        timeout=180,
+    )
+
+    if response.status_code == 200:
+        result = response.json()
+        print("✅ Image generated successfully!")
+        print(f"   Caption: {result['caption']}")
+        save_image(result["image_base64"], "1to1_competitive_gaming.png")
+        save_json(result, "1to1_competitive_gaming.json")
         return result
     else:
         print(f"❌ Error {response.status_code}: {response.text}")
@@ -304,14 +480,14 @@ def example_shorts(alice_features: dict):
     print("=" * 70)
 
     request_data = {
-        "style": "3d_cartoon",  # 3d_cartoon recommended for best quality at 512x512
+        "style": "3d_cartoon",
         "participants": [
             {
                 "handle": "alice",
-                "avatar_features": alice_features,  # Full features from profile creation
+                "avatar_features": alice_features,
             }
         ],
-        "user_message": "A confident woman striking a powerful pose in an elegant studio with dramatic lighting",
+        "user_message": "Fashionista showcasing the latest streetwear in an urban setting with graffiti walls and neon lights",
     }
 
     print("📤 Generating shorts image...")
@@ -326,12 +502,8 @@ def example_shorts(alice_features: dict):
         result = response.json()
         print("✅ Image generated successfully!")
         print(f"   Caption: {result['caption']}")
-        print(f"   Prompt used: {result['prompt_used']}")
-
-        # Save image and metadata
         save_image(result["image_base64"], "shorts_image.png")
         save_json(result, "shorts_response.json")
-
         return result
     else:
         print(f"❌ Error {response.status_code}: {response.text}")
@@ -356,12 +528,12 @@ def example_scenes(alice_features: dict, bob_features: dict):
     print("=" * 70)
 
     request_data = {
-        "style": "3d_cartoon",  # 3d_cartoon is optimal for 512x512 generation
+        "style": "3d_cartoon",
         "participants": [
             {"handle": "alice", "avatar_features": alice_features},
             {"handle": "bob", "avatar_features": bob_features},
         ],
-        "user_message": "Two friends celebrating a big win at a vibrant sports bar, cheering with drinks raised",
+        "user_message": "Two best friends laughing together at a cozy coffee shop, sharing funny stories over steaming lattes",
     }
 
     print("📤 Generating scene image...")
@@ -377,12 +549,8 @@ def example_scenes(alice_features: dict, bob_features: dict):
         result = response.json()
         print("✅ Image generated successfully!")
         print(f"   Caption: {result['caption']}")
-        print(f"   Prompt used: {result['prompt_used']}")
-
-        # Save image and metadata
         save_image(result["image_base64"], "scenes_image.png")
         save_json(result, "scenes_response.json")
-
         return result
     else:
         print(f"❌ Error {response.status_code}: {response.text}")
@@ -430,8 +598,15 @@ def main():
     # 2. Update profile
     example_profile_update()
 
-    # 3. 1:1 Chat image (Charlie tagged but not in chat - LLM decides if he appears)
-    example_1to1_chat(alice_features, bob_features, charlie_features)
+    # 3. 1:1 Chat images - Multiple scenarios to test context understanding
+    print("\n" + "=" * 70)
+    print("STEP 2: Testing 1:1 Chat Context Understanding (4 Scenarios)")
+    print("=" * 70)
+
+    example_1to1_chat_scenario_1(alice_features, bob_features)
+    example_1to1_chat_scenario_2(alice_features, bob_features)
+    example_1to1_chat_scenario_3(alice_features, bob_features, charlie_features)
+    example_1to1_chat_scenario_4(alice_features, bob_features)
 
     # 4. Shorts image
     example_shorts(alice_features)
@@ -442,6 +617,11 @@ def main():
     print("\n" + "=" * 70)
     print("✅ ALL EXAMPLES COMPLETED!")
     print(f"   Check outputs in: {OUTPUT_DIR}")
+    print("   1:1 Chat Scenarios:")
+    print("   - Romantic dinner (intimate mood)")
+    print("   - Adventure hiking (energetic/excited mood)")
+    print("   - Cozy movie night (relaxed mood + friend mention)")
+    print("   - Competitive gaming (playful/competitive mood)")
     print("=" * 70 + "\n")
 
 
