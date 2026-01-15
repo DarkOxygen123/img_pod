@@ -19,6 +19,8 @@ import base64
 import json
 import os
 from datetime import datetime
+from email import message_from_bytes
+from email.policy import default
 from pathlib import Path
 
 import requests
@@ -28,6 +30,40 @@ import requests
 BASE_URL = "https://bw77wupwq7k752-8000.proxy.runpod.net"
 OUTPUT_DIR = Path("testing/api_output")
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+
+def _parse_multipart_mixed(content_type: str, body: bytes) -> tuple[dict | None, bytes | None]:
+    """Parse multipart/mixed HTTP body and return (json_obj, image_bytes)."""
+    if not content_type or "multipart/mixed" not in content_type:
+        return None, None
+
+    # The email parser expects headers; prepend minimal headers so it can parse.
+    mime_bytes = (
+        f"Content-Type: {content_type}\r\n"
+        "MIME-Version: 1.0\r\n"
+        "\r\n"
+    ).encode("utf-8") + body
+
+    msg = message_from_bytes(mime_bytes, policy=default)
+    if not msg.is_multipart():
+        return None, None
+
+    json_obj: dict | None = None
+    image_bytes: bytes | None = None
+    for part in msg.iter_parts():
+        part_type = part.get_content_type()
+        payload = part.get_payload(decode=True)
+        if not payload:
+            continue
+        if part_type == "application/json" and json_obj is None:
+            try:
+                json_obj = json.loads(payload.decode("utf-8"))
+            except Exception:
+                json_obj = None
+        elif part_type.startswith("image/") and image_bytes is None:
+            image_bytes = payload
+
+    return json_obj, image_bytes
 
 
 def save_image(image_base64: str, filename: str) -> str:
@@ -87,7 +123,20 @@ def example_profile_create(name: str, selfie_path: str):
         )
 
     if response.status_code == 200:
-        result = response.json()
+        content_type = response.headers.get("content-type", "")
+        if "multipart/mixed" in content_type:
+            result, image_bytes = _parse_multipart_mixed(content_type, response.content)
+            if image_bytes:
+                save_image(
+                    base64.b64encode(image_bytes).decode("utf-8"),
+                    f"profile_image_{name.lower()}.png",
+                )
+            if result is None:
+                print("❌ Could not parse multipart response JSON")
+                print(f"   Content-Type: {content_type}")
+                return None
+        else:
+            result = response.json()
         print(f"✅ {name}'s profile created successfully!")
         print(f"   Face detected: {result['avatar_features']['meta']['face_detected']}")
         print(f"   Quality score: {result['avatar_features']['meta']['quality_score']}")

@@ -4,6 +4,8 @@ import os
 import time
 
 import torch
+import diffusers
+import transformers
 from diffusers import DiffusionPipeline
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -47,6 +49,19 @@ async def healthz() -> JSONResponse:
     return JSONResponse({"status": "ok", "service": "shorts_image_generator"})
 
 
+@app.get("/debug/versions")
+async def debug_versions() -> JSONResponse:
+    return JSONResponse(
+        {
+            "torch": getattr(torch, "__version__", None),
+            "diffusers": getattr(diffusers, "__version__", None),
+            "transformers": getattr(transformers, "__version__", None),
+            "model_id": MODEL_ID,
+            "device": DEVICE,
+        }
+    )
+
+
 @app.post("/v1/chat/shorts/generate", response_class=JSONResponse)
 async def generate_shorts_image(request: WorkerShortsRequest = Body(...)) -> JSONResponse:
     """
@@ -73,22 +88,29 @@ async def generate_shorts_image(request: WorkerShortsRequest = Body(...)) -> JSO
     # Generate image with provided prompt (NSFW moderated via LLM)
     t_infer0 = time.time()
     try:
-        out = _pipe(
-            prompt=request.prompt,
-            negative_prompt=request.negative_prompt,
-            height=request.height,
-            width=request.width,
-            num_inference_steps=request.num_inference_steps,
-            guidance_scale=request.guidance_scale,
-        )
-    except TypeError:
-        # Fallback if negative_prompt not supported
-        out = _pipe(
-            prompt=request.prompt,
-            height=request.height,
-            width=request.width,
-            num_inference_steps=request.num_inference_steps,
-            guidance_scale=request.guidance_scale,
+        try:
+            out = _pipe(
+                prompt=request.prompt,
+                negative_prompt=request.negative_prompt,
+                height=request.height,
+                width=request.width,
+                num_inference_steps=request.num_inference_steps,
+                guidance_scale=request.guidance_scale,
+            )
+        except TypeError:
+            # Fallback if negative_prompt not supported
+            out = _pipe(
+                prompt=request.prompt,
+                height=request.height,
+                width=request.width,
+                num_inference_steps=request.num_inference_steps,
+                guidance_scale=request.guidance_scale,
+            )
+    except Exception as e:
+        logger.exception("shorts_generation_failed")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": type(e).__name__, "message": str(e)[:500]},
         )
     t_infer_s = time.time() - t_infer0
     
