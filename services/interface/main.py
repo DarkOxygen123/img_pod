@@ -655,7 +655,7 @@ async def chat_1to1_imagegen(body: Chat1to1ImageGenRequest = Body(...)) -> JSONR
     
     logger.info(
         "chat1to1_llm_expand_complete",
-        extra={"extra_fields": {"prompt_length": len(expanded_prompt), "shortened": shortened_target is not None}}
+        extra={"extra_fields": {"prompt_length": len(expanded_prompt), "shortened": shortened_target is not None, "expanded_prompt_preview": expanded_prompt[:200]}}
     )
     
     # Step 2: Generate image via 1:1 chat worker
@@ -715,7 +715,8 @@ async def chat_1to1_imagegen(body: Chat1to1ImageGenRequest = Body(...)) -> JSONR
     
     # Step 4: Return response
     image_base64 = base64.b64encode(image_bytes).decode()
-    prompt_to_return = shortened_target if shortened_target else body.target_message
+    # Return the actual expanded prompt that was used for image generation
+    prompt_to_return = expanded_prompt
     
     t_elapsed = asyncio.get_event_loop().time() - t0
     logger.info(
@@ -786,7 +787,7 @@ async def chat_shorts_generate(body: ShortsImageGenRequest = Body(...)) -> JSONR
     
     logger.info(
         "shorts_llm_expand_complete",
-        extra={"extra_fields": {"prompt_length": len(expanded_prompt), "shortened": shortened_message is not None}}
+        extra={"extra_fields": {"prompt_length": len(expanded_prompt), "shortened": shortened_message is not None, "expanded_prompt_preview": expanded_prompt[:200]}}
     )
     
     # Step 2: Generate image via shorts worker
@@ -846,7 +847,8 @@ async def chat_shorts_generate(body: ShortsImageGenRequest = Body(...)) -> JSONR
     
     # Step 4: Return response
     image_base64 = base64.b64encode(image_bytes).decode()
-    prompt_to_return = shortened_message if shortened_message else body.user_message
+    # Return the actual expanded prompt that was used for image generation
+    prompt_to_return = expanded_prompt
     
     t_elapsed = asyncio.get_event_loop().time() - t0
     logger.info(
@@ -917,7 +919,7 @@ async def chat_scenes_generate(body: ScenesImageGenRequest = Body(...)) -> JSONR
     
     logger.info(
         "scenes_llm_expand_complete",
-        extra={"extra_fields": {"prompt_length": len(expanded_prompt), "shortened": shortened_message is not None}}
+        extra={"extra_fields": {"prompt_length": len(expanded_prompt), "shortened": shortened_message is not None, "expanded_prompt_preview": expanded_prompt[:200]}}
     )
     
     # Step 2: Generate image via scenes worker
@@ -977,7 +979,8 @@ async def chat_scenes_generate(body: ScenesImageGenRequest = Body(...)) -> JSONR
     
     # Step 4: Return response
     image_base64 = base64.b64encode(image_bytes).decode()
-    prompt_to_return = shortened_message if shortened_message else body.user_message
+    # Return the actual expanded prompt that was used for image generation
+    prompt_to_return = expanded_prompt
     
     t_elapsed = asyncio.get_event_loop().time() - t0
     logger.info(
