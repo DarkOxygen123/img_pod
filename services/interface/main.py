@@ -33,6 +33,31 @@ app = FastAPI()
 interface_settings = config.interface_settings()
 
 
+def _llm_base_url() -> str:
+    # Settings URLs often include a trailing slash; normalize to avoid "//" paths.
+    return str(interface_settings.llm_service_url).rstrip("/")
+
+
+def _safe_json(resp, *, context: str):
+    """Parse JSON or raise an actionable 502 with response preview."""
+    try:
+        return resp.json()
+    except Exception as e:
+        content_type = ""
+        try:
+            content_type = resp.headers.get("content-type", "")
+        except Exception:
+            pass
+        try:
+            body_preview = resp.content[:1000].decode(errors="replace")
+        except Exception:
+            body_preview = str(resp.content)[:1000]
+        raise HTTPException(
+            status_code=502,
+            detail=f"{context} returned non-JSON (status={getattr(resp, 'status_code', None)}, content-type={content_type}): {body_preview}",
+        ) from e
+
+
 class QueueItem:
     def __init__(self, payload: dict, future: asyncio.Future):
         self.payload = payload
@@ -495,10 +520,10 @@ async def chat_private_imagegen(body: ChatPrivateImageGenRequest) -> Response:
         "style_request": body.style_request.model_dump(),
         "is_general": False,
     }
-    llm_resp = await post_json(str(interface_settings.llm_service_url) + "/v1/bundle", llm_payload, timeout_s=10.0)
-    if llm_resp.status_code >= 400:
+    llm_resp = await post_json(_llm_base_url() + "/v1/bundle", llm_payload, timeout_s=10.0)
+    if llm_resp.status_code >= 300:
         raise HTTPException(status_code=502, detail=f"LLM error: {llm_resp.content.decode(errors='replace')}")
-    bundle = llm_resp.json()["prompt_bundle"]
+    bundle = _safe_json(llm_resp, context="LLM /v1/bundle")["prompt_bundle"]
     prompt = bundle["final_prompt"]
     worker_url = pick_text2img_worker()
     payload = {
@@ -536,10 +561,10 @@ async def general_imagegen(body: GeneralImageGenRequest) -> Response:
         "style_request": body.style_request.model_dump(),
         "is_general": True,
     }
-    llm_resp = await post_json(str(interface_settings.llm_service_url) + "/v1/bundle", llm_payload, timeout_s=10.0)
-    if llm_resp.status_code >= 400:
+    llm_resp = await post_json(_llm_base_url() + "/v1/bundle", llm_payload, timeout_s=10.0)
+    if llm_resp.status_code >= 300:
         raise HTTPException(status_code=502, detail=f"LLM error: {llm_resp.content.decode(errors='replace')}")
-    bundle = llm_resp.json()["prompt_bundle"]
+    bundle = _safe_json(llm_resp, context="LLM /v1/bundle")["prompt_bundle"]
     prompt = bundle["final_prompt"]
     worker_url = pick_text2img_worker()
     payload = {
@@ -594,17 +619,17 @@ async def chat_1to1_imagegen(body: Chat1to1ImageGenRequest = Body(...)) -> JSONR
         "target_message": body.target_message,
     }
     expand_resp = await post_json(
-        str(interface_settings.llm_service_url) + "/v1/chat/1to1/expand",
+        _llm_base_url() + "/v1/chat/1to1/expand",
         expand_payload,
         timeout_s=15.0,
     )
-    if expand_resp.status_code >= 400:
+    if expand_resp.status_code >= 300:
         raise HTTPException(
             status_code=502,
             detail=f"LLM expand error: {expand_resp.content.decode(errors='replace')}"
         )
-    
-    expand_data = expand_resp.json()
+
+    expand_data = _safe_json(expand_resp, context="LLM /v1/chat/1to1/expand")
     expanded_prompt = expand_data["expanded_prompt"]
     shortened_target = expand_data.get("shortened_target")
     
@@ -656,15 +681,15 @@ async def chat_1to1_imagegen(body: Chat1to1ImageGenRequest = Body(...)) -> JSONR
     logger.info("chat1to1_calling_llm_caption")
     caption_payload = {"prompt": expanded_prompt, "context_type": "1to1"}
     caption_resp = await post_json(
-        str(interface_settings.llm_service_url) + "/v1/chat/1to1/caption",
+        _llm_base_url() + "/v1/chat/1to1/caption",
         caption_payload,
         timeout_s=10.0,
     )
-    if caption_resp.status_code >= 400:
+    if caption_resp.status_code >= 300:
         logger.warning("chat1to1_caption_failed", extra={"extra_fields": {"error": caption_resp.content.decode(errors='replace')}})
         caption = "✨ Us, together"  # Fallback caption (1st person)
     else:
-        caption = caption_resp.json()["caption"]
+        caption = _safe_json(caption_resp, context="LLM /v1/chat/1to1/caption")["caption"]
     
     logger.info("chat1to1_caption_complete", extra={"extra_fields": {"caption": caption}})
     
@@ -725,17 +750,17 @@ async def chat_shorts_generate(body: ShortsImageGenRequest = Body(...)) -> JSONR
         "user_message": body.user_message,
     }
     expand_resp = await post_json(
-        str(interface_settings.llm_service_url) + "/v1/chat/shorts/expand",
+        _llm_base_url() + "/v1/chat/shorts/expand",
         expand_payload,
         timeout_s=15.0,
     )
-    if expand_resp.status_code >= 400:
+    if expand_resp.status_code >= 300:
         raise HTTPException(
             status_code=502,
             detail=f"LLM expand error: {expand_resp.content.decode(errors='replace')}"
         )
     
-    expand_data = expand_resp.json()
+    expand_data = _safe_json(expand_resp, context="LLM /v1/chat/shorts/expand")
     expanded_prompt = expand_data["expanded_prompt"]
     shortened_message = expand_data.get("shortened_message")
     
@@ -787,15 +812,15 @@ async def chat_shorts_generate(body: ShortsImageGenRequest = Body(...)) -> JSONR
     logger.info("shorts_calling_llm_caption")
     caption_payload = {"prompt": expanded_prompt, "context_type": "shorts"}
     caption_resp = await post_json(
-        str(interface_settings.llm_service_url) + "/v1/chat/1to1/caption",
+        _llm_base_url() + "/v1/chat/1to1/caption",
         caption_payload,
         timeout_s=10.0,
     )
-    if caption_resp.status_code >= 400:
+    if caption_resp.status_code >= 300:
         logger.warning("shorts_caption_failed", extra={"extra_fields": {"error": caption_resp.content.decode(errors='replace')}})
         caption = "✨ Feeling this moment"  # Fallback caption (emotion-focused)
     else:
-        caption = caption_resp.json()["caption"]
+        caption = _safe_json(caption_resp, context="LLM /v1/chat/1to1/caption")["caption"]
     
     logger.info("shorts_caption_complete", extra={"extra_fields": {"caption": caption}})
     
@@ -856,17 +881,17 @@ async def chat_scenes_generate(body: ScenesImageGenRequest = Body(...)) -> JSONR
         "user_message": body.user_message,
     }
     expand_resp = await post_json(
-        str(interface_settings.llm_service_url) + "/v1/chat/scenes/expand",
+        _llm_base_url() + "/v1/chat/scenes/expand",
         expand_payload,
         timeout_s=15.0,
     )
-    if expand_resp.status_code >= 400:
+    if expand_resp.status_code >= 300:
         raise HTTPException(
             status_code=502,
             detail=f"LLM expand error: {expand_resp.content.decode(errors='replace')}"
         )
     
-    expand_data = expand_resp.json()
+    expand_data = _safe_json(expand_resp, context="LLM /v1/chat/scenes/expand")
     expanded_prompt = expand_data["expanded_prompt"]
     shortened_message = expand_data.get("shortened_message")
     
@@ -918,15 +943,15 @@ async def chat_scenes_generate(body: ScenesImageGenRequest = Body(...)) -> JSONR
     logger.info("scenes_calling_llm_caption")
     caption_payload = {"prompt": expanded_prompt, "context_type": "scenes"}
     caption_resp = await post_json(
-        str(interface_settings.llm_service_url) + "/v1/chat/1to1/caption",
+        _llm_base_url() + "/v1/chat/1to1/caption",
         caption_payload,
         timeout_s=10.0,
     )
-    if caption_resp.status_code >= 400:
+    if caption_resp.status_code >= 300:
         logger.warning("scenes_caption_failed", extra={"extra_fields": {"error": caption_resp.content.decode(errors='replace')}})
         caption = "✨ Capturing this vibe"  # Fallback caption (emotion-focused)
     else:
-        caption = caption_resp.json()["caption"]
+        caption = _safe_json(caption_resp, context="LLM /v1/chat/1to1/caption")["caption"]
     
     logger.info("scenes_caption_complete", extra={"extra_fields": {"caption": caption}})
     
