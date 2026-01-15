@@ -91,6 +91,159 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
     raise ValueError("Unclosed JSON object")
 
 
+def _build_character_description(handle: str, avatar_features) -> str:
+    """Build comprehensive character description matching profile generation format."""
+    obs = avatar_features.observed
+    dress = avatar_features.dress
+    accessories = avatar_features.accessories
+    
+    # Normalize gender
+    gender_raw = (obs.gender or "person").strip()
+    if gender_raw == "male":
+        gender = "man"
+    elif gender_raw == "female":
+        gender = "woman"
+    else:
+        gender = "person"
+    
+    # Core features (matching profile_worker._profile_prompt)
+    age = obs.age_appearance or "adult"
+    skin_tone = obs.skin_tone or "natural"
+    skin_undertone = obs.skin_undertone
+    hair_color = obs.hair_color or "dark"
+    hair_type = obs.hair_type or "natural"
+    hair_style = obs.hair_style
+    hair_length = obs.hair_length or "medium"
+    hairline_type = obs.hairline_type
+    balding_pattern = obs.balding_pattern
+    eye_color = obs.eye_color or "brown"
+    eye_shape = obs.eye_shape
+    face_shape = obs.face_shape or "oval"
+    
+    # Facial hair (comprehensive)
+    facial_hair = obs.facial_hair
+    facial_hair_density = obs.facial_hair_density
+    beard_style = obs.beard_style
+    mustache_style = obs.mustache_style
+    
+    # Facial marks
+    facial_marks = obs.facial_marks
+    facial_mark_position = obs.facial_mark_position
+    
+    # Clothing
+    dress_color = dress.dress_color if dress else None
+    dress_type = dress.dress_type if dress else None
+    
+    # Accessories
+    hat_present = accessories.hat_present == "yes" if accessories else False
+    hat_style = accessories.hat_style if accessories else None
+    hat_color = accessories.hat_color if accessories else None
+    glasses_present = accessories.glasses_present == "yes" if accessories else False
+    glasses_type = accessories.glasses_type if accessories else None
+    glasses_color = accessories.glasses_color if accessories else None
+    mask_present = accessories.mask_present == "yes" if accessories else False
+    mask_type = accessories.mask_type if accessories else None
+    mask_color = accessories.mask_color if accessories else None
+    
+    # Build comprehensive description
+    parts = [f"{handle}: {age} {gender}"]
+    
+    # Skin
+    if skin_undertone and skin_undertone != "none":
+        parts.append(f"{skin_tone} skin ({skin_undertone} undertone)")
+    else:
+        parts.append(f"{skin_tone} skin")
+    
+    # Hair (detailed)
+    hair_desc = f"{hair_color} {hair_type} hair"
+    if hair_length:
+        hair_desc += f" ({hair_length} length)"
+    if hair_style and hair_style != "none":
+        hair_desc += f", {hair_style} style"
+    if hairline_type and hairline_type != "none":
+        hair_desc += f", {hairline_type} hairline"
+    if balding_pattern and balding_pattern not in ("none", "no"):
+        hair_desc += f", {balding_pattern} balding"
+    parts.append(hair_desc)
+    
+    # Eyes
+    if eye_shape and eye_shape != "none":
+        parts.append(f"{eye_color} eyes ({eye_shape} shape)")
+    else:
+        parts.append(f"{eye_color} eyes")
+    
+    # Face shape
+    parts.append(f"{face_shape} face")
+    
+    # Facial hair (detailed, gender-aware)
+    if gender == "woman":
+        # Women: explicitly no facial hair
+        facial_hair_desc = "no facial hair"
+    else:
+        # Men: comprehensive facial hair handling
+        beard = (beard_style or "").strip()
+        mustache = (mustache_style or "").strip()
+        
+        if beard and beard != "none" and mustache and mustache != "none":
+            if facial_hair_density and facial_hair_density != "none":
+                facial_hair_desc = f"{facial_hair_density} {mustache} mustache and {beard} beard"
+            else:
+                facial_hair_desc = f"{mustache} mustache and {beard} beard"
+        elif beard and beard != "none":
+            if facial_hair_density and facial_hair_density != "none":
+                facial_hair_desc = f"{facial_hair_density} {beard} beard"
+            else:
+                facial_hair_desc = f"{beard} beard"
+        elif mustache and mustache != "none":
+            if facial_hair_density and facial_hair_density != "none":
+                facial_hair_desc = f"{facial_hair_density} {mustache} mustache"
+            else:
+                facial_hair_desc = f"{mustache} mustache"
+        elif facial_hair and facial_hair != "none":
+            # Fallback to legacy field
+            if facial_hair_density and facial_hair_density != "none":
+                facial_hair_desc = f"{facial_hair_density} {facial_hair}"
+            else:
+                facial_hair_desc = facial_hair
+        else:
+            # Explicitly clean-shaven when no facial hair detected
+            facial_hair_desc = "clean-shaven"
+    
+    parts.append(facial_hair_desc)
+    
+    # Facial marks
+    if facial_marks and facial_marks != "none":
+        if facial_mark_position and facial_mark_position != "none":
+            parts.append(f"{facial_marks} on {facial_mark_position}")
+        else:
+            parts.append(f"{facial_marks}")
+    
+    # Clothing
+    if dress_color and dress_type:
+        parts.append(f"wearing {dress_color} {dress_type}")
+    
+    # Accessories
+    if hat_present and hat_style and hat_style != "none":
+        if hat_color and hat_color != "none":
+            parts.append(f"{hat_color} {hat_style} hat")
+        else:
+            parts.append(f"{hat_style} hat")
+    
+    if glasses_present and glasses_type and glasses_type != "none":
+        if glasses_color and glasses_color != "none":
+            parts.append(f"{glasses_color} {glasses_type}")
+        else:
+            parts.append(f"{glasses_type}")
+    
+    if mask_present and mask_type and mask_type != "none":
+        if mask_color and mask_color != "none":
+            parts.append(f"{mask_color} {mask_type} mask")
+        else:
+            parts.append(f"{mask_type} mask")
+    
+    return "; ".join(parts)
+
+
 def _generate(system: str, user: str) -> str:
     if _tokenizer is None or _model is None:
         raise HTTPException(status_code=503, detail="LLM not loaded")
@@ -220,19 +373,11 @@ async def expand_chat_context(request: LlmChat1to1ExpandRequest) -> LlmChat1to1E
     
     chat_context = "\n".join(messages_summary)
     
-    # Build participants info
+    # Build comprehensive participants descriptions (matching profile format)
     participants_info = []
     for p in request.participants:
-        obs = p.avatar_features.observed
-        participants_info.append({
-            "handle": p.handle,
-            "gender": obs.gender or "person",
-            "age": obs.age_appearance or "adult",
-            "hair": f"{obs.hair_color or 'dark'} {obs.hair_type or ''} {obs.hair_style or ''}".strip(),
-            "skin_tone": obs.skin_tone or "natural",
-            "facial_hair": obs.facial_hair if obs.facial_hair else "none",
-            "expression": obs.expression or "neutral",
-        })
+        char_desc = _build_character_description(p.handle, p.avatar_features)
+        participants_info.append(char_desc)
     
     system = (
         "You are an expert at creating detailed image generation prompts from chat conversations. "
@@ -265,7 +410,13 @@ async def expand_chat_context(request: LlmChat1to1ExpandRequest) -> LlmChat1to1E
     
     try:
         obj = _extract_json_object(raw)
-        expanded_prompt = obj.get("expanded_prompt", "")
+        # LLM returns nested object, flatten it into a single string
+        if isinstance(obj.get("expanded_prompt"), dict):
+            # Flatten the structured sections into a single prompt string
+            sections = obj["expanded_prompt"]
+            expanded_prompt = "\n\n".join([f"{k}: {v}" for k, v in sections.items()])
+        else:
+            expanded_prompt = obj.get("expanded_prompt", "")
     except Exception as e:
         logger.error("failed_to_parse_llm_json", extra={"extra_fields": {"error": str(e), "raw": raw[:200]}})
         # Fallback: basic concatenation
@@ -358,19 +509,11 @@ async def expand_shorts_prompt(request: LlmShortsExpandRequest) -> LlmShortsExpa
     """
     t0 = time.time()
     
-    # Build participants info
+    # Build comprehensive participants descriptions (matching profile format)
     participants_info = []
     for p in request.participants:
-        obs = p.avatar_features.observed
-        participants_info.append({
-            "handle": p.handle,
-            "gender": obs.gender or "person",
-            "age": obs.age_appearance or "adult",
-            "hair": f"{obs.hair_color or 'dark'} {obs.hair_type or ''} {obs.hair_style or ''}".strip(),
-            "skin_tone": obs.skin_tone or "natural",
-            "facial_hair": obs.facial_hair if obs.facial_hair else "none",
-            "expression": obs.expression or "neutral",
-        })
+        char_desc = _build_character_description(p.handle, p.avatar_features)
+        participants_info.append(char_desc)
     
     system = (
         "You are an expert at creating detailed image generation prompts. "
@@ -402,7 +545,13 @@ async def expand_shorts_prompt(request: LlmShortsExpandRequest) -> LlmShortsExpa
     
     try:
         obj = _extract_json_object(raw)
-        expanded_prompt = obj.get("expanded_prompt", "")
+        # LLM returns nested object, flatten it into a single string
+        if isinstance(obj.get("expanded_prompt"), dict):
+            # Flatten the structured sections into a single prompt string
+            sections = obj["expanded_prompt"]
+            expanded_prompt = "\n\n".join([f"{k}: {v}" for k, v in sections.items()])
+        else:
+            expanded_prompt = obj.get("expanded_prompt", "")
     except Exception as e:
         logger.error("failed_to_parse_llm_json", extra={"extra_fields": {"error": str(e), "raw": raw[:200]}})
         # Fallback: basic concatenation with safety
@@ -449,19 +598,11 @@ async def expand_scenes_prompt(request: LlmScenesExpandRequest) -> LlmScenesExpa
     """
     t0 = time.time()
     
-    # Build participants info
+    # Build comprehensive participants descriptions (matching profile format)
     participants_info = []
     for p in request.participants:
-        obs = p.avatar_features.observed
-        participants_info.append({
-            "handle": p.handle,
-            "gender": obs.gender or "person",
-            "age": obs.age_appearance or "adult",
-            "hair": f"{obs.hair_color or 'dark'} {obs.hair_type or ''} {obs.hair_style or ''}".strip(),
-            "skin_tone": obs.skin_tone or "natural",
-            "facial_hair": obs.facial_hair if obs.facial_hair else "none",
-            "expression": obs.expression or "neutral",
-        })
+        char_desc = _build_character_description(p.handle, p.avatar_features)
+        participants_info.append(char_desc)
     
     system = (
         "You are an expert at creating detailed image generation prompts. "
@@ -493,10 +634,16 @@ async def expand_scenes_prompt(request: LlmScenesExpandRequest) -> LlmScenesExpa
     
     try:
         obj = _extract_json_object(raw)
-        expanded_prompt = obj.get("expanded_prompt", "")
+        # LLM returns nested object, flatten it into a single string
+        if isinstance(obj.get("expanded_prompt"), dict):
+            # Flatten the structured sections into a single prompt string
+            sections = obj["expanded_prompt"]
+            expanded_prompt = "\n\n".join([f"{k}: {v}" for k, v in sections.items()])
+        else:
+            expanded_prompt = obj.get("expanded_prompt", "")
     except Exception as e:
-        logger.error("failed_to_parse_llm_json", extra={"extra_fields": {"error": str(e), "raw": raw[:200]}})
-        # Fallback: basic concatenation with safety
+        logger.error("failed_to_parse_llm_json", extra={"extra_fields": {"error": str(e), "raw": raw[:500]}})
+        # Fallback: basic concatenation with NSFW moderation
         expanded_prompt = f"Style: {request.style}. Scene: {request.user_message} (clothed, tasteful framing). Participants: {', '.join([p.handle for p in request.participants])}."
     
     # Shorten message if >25 words

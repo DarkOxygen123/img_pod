@@ -12,3 +12,5 @@ testing/output/
 # Batch tester artifacts
 testing/selfies/
 testing/selfies_output/
+
+testing/
