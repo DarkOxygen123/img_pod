@@ -15,15 +15,15 @@ interface:
   shorts_sla_ms: 90000
   scenes_sla_ms: 90000
   # Speed/quality tuning (lower is faster)
-  chat1to1_height: 768
-  chat1to1_width: 768
-  chat1to1_num_inference_steps: 6
-  shorts_height: 768
-  shorts_width: 768
-  shorts_num_inference_steps: 6
-  scenes_height: 768
-  scenes_width: 768
-  scenes_num_inference_steps: 6
+  chat1to1_height: 512
+  chat1to1_width: 512
+  chat1to1_num_inference_steps: 4
+  shorts_height: 512
+  shorts_width: 512
+  shorts_num_inference_steps: 4
+  scenes_height: 512
+  scenes_width: 512
+  scenes_num_inference_steps: 4
   llm_service_url: "https://abj0jt7cd4hgdy-8002.proxy.runpod.net"
   selfie_feature_worker_urls:
     - "https://97dsnjce4yxe96-8003.proxy.runpod.net"

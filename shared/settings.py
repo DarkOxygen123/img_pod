@@ -27,16 +27,17 @@ class InterfaceSettings(BaseSettings):
     scenes_sla_ms: int = 90_000
 
     # Default generation params (tune for speed/quality tradeoff).
-    # 768x768 + 6 steps is meaningfully faster than 1024x1024 + 9 steps.
-    chat1to1_height: int = 768
-    chat1to1_width: int = 768
-    chat1to1_num_inference_steps: int = 6
-    shorts_height: int = 768
-    shorts_width: int = 768
-    shorts_num_inference_steps: int = 6
-    scenes_height: int = 768
-    scenes_width: int = 768
-    scenes_num_inference_steps: int = 6
+    # Target: ~5–8s warm latency on decent GPUs.
+    # 512x512 + 4 steps is substantially faster than 1024x1024 + 9 steps.
+    chat1to1_height: int = 512
+    chat1to1_width: int = 512
+    chat1to1_num_inference_steps: int = 4
+    shorts_height: int = 512
+    shorts_width: int = 512
+    shorts_num_inference_steps: int = 4
+    scenes_height: int = 512
+    scenes_width: int = 512
+    scenes_num_inference_steps: int = 4
     llm_service_url: HttpUrl = "https://abj0jt7cd4hgdy-8002.proxy.runpod.net"
     selfie_feature_worker_urls: List[HttpUrl] = ["https://97dsnjce4yxe96-8003.proxy.runpod.net"]
     profile_worker_urls: List[HttpUrl] = ["https://x690sjq9dtevw4-8003.proxy.runpod.net"]
