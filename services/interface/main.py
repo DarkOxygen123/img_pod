@@ -469,57 +469,28 @@ async def health() -> JSONResponse:
 
 @app.post("/v1/profile/update")
 async def profile_update(body: ProfileUpdateRequest = Body(...)) -> Response:
-    """Update specific profile fields and regenerate avatar image."""
-    # Build updated avatar_features from individual fields
-    avatar_features = {
-        "observed": {},
-        "dress": {},
-        "accessories": {},
-        "meta": {
-            "face_detected": True,
-            "num_faces": 1,
-            "quality_score": 1.0
-        }
-    }
-    
-    # Hair attributes
-    if body.hair_color is not None:
-        avatar_features["observed"]["hair_color"] = body.hair_color
-    if body.hair_type is not None:
-        avatar_features["observed"]["hair_type"] = body.hair_type
-    if body.hair_style is not None:
-        avatar_features["observed"]["hair_style"] = body.hair_style
-    if body.hair_length is not None:
-        avatar_features["observed"]["hair_length"] = body.hair_length
-    
-    # Skin attributes
-    if body.skin_tone is not None:
-        avatar_features["observed"]["skin_tone"] = body.skin_tone
-    if body.skin_undertone is not None:
-        avatar_features["observed"]["skin_undertone"] = body.skin_undertone
-    
-    # Accessories
-    if body.hat_present is not None:
-        avatar_features["accessories"]["hat_present"] = body.hat_present
-    if body.hat_style is not None:
-        avatar_features["accessories"]["hat_style"] = body.hat_style
-    if body.hat_color is not None:
-        avatar_features["accessories"]["hat_color"] = body.hat_color
-    if body.mask_present is not None:
-        avatar_features["accessories"]["mask_present"] = body.mask_present
-    if body.mask_type is not None:
-        avatar_features["accessories"]["mask_type"] = body.mask_type
-    if body.mask_color is not None:
-        avatar_features["accessories"]["mask_color"] = body.mask_color
-    
-    # Queue features to profile GPU generate
-    gen_payload = {"avatar_features": avatar_features}
+    """Update profile with complete feature set and regenerate avatar image."""
+    # Use the complete avatar_features provided in the request
+    gen_payload = {"avatar_features": body.avatar_features.model_dump()}
     gen_future = await enqueue_or_429(profile_generate_queue, gen_payload, interface_settings.profile_sla_ms, profile_generate_worker)
     try:
         image_bytes: bytes = await asyncio.wait_for(gen_future, timeout=interface_settings.profile_sla_ms / 1000)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Profile generate timed out")
-    return Response(content=image_bytes, media_type="image/png")
+    
+    # Multipart response: JSON features + PNG image (same as profile/create)
+    json_part = ProfileCreateResponse(avatar_features=body.avatar_features).model_dump_json()
+    boundary = f"boundary-{uuid.uuid4().hex}"
+    parts: List[bytes] = []
+    parts.append(f"--{boundary}\r\nContent-Type: application/json\r\n\r\n{json_part}\r\n".encode())
+    parts.append(
+        f"--{boundary}\r\nContent-Type: image/png\r\nContent-Disposition: attachment; filename=profile.png\r\n\r\n".encode()
+        + image_bytes
+        + b"\r\n"
+    )
+    parts.append(f"--{boundary}--\r\n".encode())
+    response_body = b"".join(parts)
+    return Response(content=response_body, media_type=f"multipart/mixed; boundary={boundary}")
 
 
 @app.post("/v1/chat/private/imagegen")
